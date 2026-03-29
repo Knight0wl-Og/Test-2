@@ -11,7 +11,10 @@
     "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
     "dev:electron": "concurrently -n backend,frontend,electron -c cyan,magenta,yellow \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\" \"wait-on http://localhost:5173 && npm run dev --workspace=electron\"",
     "build": "npm run build --workspace=frontend && npm run build --workspace=backend",
-    "build:electron": "npm run build && npm run build --workspace=electron"
+    "build:electron": "npm run build && npm run build --workspace=electron",
+    "build:win": "npm run build --workspace=frontend && npm run build --workspace=backend && npm run build:win --workspace=electron",
+    "build:linux": "npm run build --workspace=frontend && npm run build --workspace=backend && npm run build:linux --workspace=electron",
+    "start": "npm run dev"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

@@ -4,34 +4,72 @@
   "private": true,
   "main": "src/main.js",
   "scripts": {
-    "dev": "electron .",
-    "build": "electron-builder",
-    "pack": "electron-builder --dir"
+    "dev": "cross-env NODE_ENV=development electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build": "electron-builder"
   },
   "dependencies": {
     "electron": "^30.0.0"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "electron-builder": "^24.13.3"
   },
   "build": {
     "appId": "com.tradeedge.app",
     "productName": "TradeEdge",
+    "copyright": "Copyright 2025 TradeEdge",
     "directories": {
-      "output": "out"
+      "output": "out",
+      "buildResources": "assets"
     },
     "files": [
-      "src/**/*",
-      "node_modules/**/*"
+      "src/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../frontend/dist",
+        "to": "frontend/dist",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../backend/dist",
+        "to": "backend/dist",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../backend/node_modules",
+        "to": "backend/node_modules",
+        "filter": ["**/*"]
+      }
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "publisherName": "TradeEdge"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TradeEdge",
+      "installerHeaderIcon": "assets/icon.ico",
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "category": "public.app-category.finance"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "category": "Finance"
     }
   }
 }

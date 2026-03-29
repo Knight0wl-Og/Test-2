@@ -1,8 +1,17 @@
 import axios from 'axios';
 import type { Quote, OHLCVBar, SectorData, FearGreedData, WatchlistGroup } from '../types';
 
+function getBaseUrl(): string {
+  // Allow runtime override (used by Android APK to point to user's backend)
+  if (typeof window !== 'undefined') {
+    const override = localStorage.getItem('TRADEEDGE_API_URL');
+    if (override) return override;
+  }
+  return import.meta.env.VITE_API_URL || 'http://localhost:3001';
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
+  baseURL: getBaseUrl(),
   timeout: 15000,
 });
 
