@@ -1,13 +1,26 @@
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { config } from '../config';
 
-export const db = new Pool({
-  connectionString: config.databaseUrl,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+let pool: Pool | null = null;
 
-db.on('error', (err) => {
-  console.error('Unexpected PostgreSQL error:', err);
-});
+function getPool(): Pool {
+  if (!pool) {
+    pool = new Pool({
+      connectionString: config.databaseUrl,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 3000,
+    });
+    pool.on('error', (err) => {
+      console.error('PostgreSQL pool error:', err.message);
+    });
+  }
+  return pool;
+}
+
+export { getPool };
+
+export const db = {
+  query: (text: string, params?: unknown[]) => getPool().query(text, params),
+  connect: (): Promise<PoolClient> => getPool().connect(),
+};

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { cached } from '../cache/redis';
 import { getBatchQuotes, isMarketOpen } from '../services/yahooFinance';
+import { getMockFearGreed } from '../services/mockData';
 
 const router = Router();
 
@@ -58,27 +59,27 @@ router.get('/sectors', async (_req: Request, res: Response) => {
 router.get('/fear-greed', async (_req: Request, res: Response) => {
   try {
     const data = await cached('market:fear-greed', 3600, async () => {
-      // Alternative.me CNN Fear & Greed API (free)
-      const r = await axios.get('https://fear-and-greed-index.p.rapidapi.com/v1/fgi', {
-        headers: {
-          'x-rapidapi-host': 'fear-and-greed-index.p.rapidapi.com',
-        },
+      // Alternative.me Fear & Greed Index API (free)
+      const r = await axios.get('https://api.alternative.me/fng/?limit=30', {
         timeout: 5000,
       });
-      return r.data;
+      const entries: Array<{ value: string; value_classification: string }> = r.data.data;
+      const pick = (i: number) => {
+        const e = entries[Math.min(i, entries.length - 1)];
+        return { value: Number(e.value), valueText: e.value_classification };
+      };
+      return {
+        fgi: {
+          now: pick(0),
+          previousClose: pick(1),
+          oneWeekAgo: pick(7),
+          oneMonthAgo: pick(29),
+        },
+      };
     });
     res.json(data);
   } catch {
-    // Fallback: return a mock if API is unavailable
-    res.json({
-      fgi: {
-        now: { value: 50, valueText: 'Neutral' },
-        previousClose: { value: 48, valueText: 'Neutral' },
-        oneWeekAgo: { value: 55, valueText: 'Greed' },
-        oneMonthAgo: { value: 40, valueText: 'Fear' },
-      },
-      _fallback: true,
-    });
+    res.json({ ...getMockFearGreed(), _fallback: true });
   }
 });
 

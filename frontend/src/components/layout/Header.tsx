@@ -53,6 +53,14 @@ export function Header({ onSearch }: HeaderProps) {
           </span>
         </div>
 
+        {/* Demo mode badge */}
+        <span
+          title="Live market data requires internet access. Showing realistic demo data."
+          className="hidden sm:inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-gold/40 text-gold/80 bg-gold/5 cursor-default select-none"
+        >
+          DEMO
+        </span>
+
         <button className="text-text-muted hover:text-gray-200 transition-colors">
           <Bell className="w-4 h-4" />
         </button>
