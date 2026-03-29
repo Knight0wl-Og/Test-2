@@ -32,6 +32,9 @@ jobs:
       - name: Build backend
         run: npm run build --workspace=backend
 
+      - name: Prepare backend node_modules for bundling
+        run: node scripts/prep-backend-bundle.js
+
       - name: Build Windows installer
         run: npm run build:win --workspace=electron
 
