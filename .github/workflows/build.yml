@@ -22,9 +22,16 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: System info
+        shell: pwsh
+        run: |
+          Write-Host "Node $(node --version)  npm $(npm --version)"
+          Write-Host "Working dir: $(Get-Location)"
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build frontend
         run: npm run build --workspace=frontend
@@ -37,14 +44,27 @@ jobs:
 
       - name: Build Windows installer
         run: npm run build:win --workspace=electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Prevent electron-builder from trying to publish
+          EP_DRAFT: true
+          EP_PRE_RELEASE: false
 
-      - name: Rename installer
+      - name: Find and rename installer
         shell: pwsh
         run: |
-          $src = Get-ChildItem "electron/out" -Filter "*.exe" | Select-Object -First 1
+          $files = Get-ChildItem "electron/out" -Filter "*.exe" -ErrorAction SilentlyContinue
+          if (-not $files) {
+            Write-Host "Contents of electron/out:"
+            Get-ChildItem "electron/out" -ErrorAction SilentlyContinue
+            Write-Error "No .exe found in electron/out — electron-builder may have failed"
+            exit 1
+          }
+          $src = $files | Select-Object -First 1
+          Write-Host "Packaging: $($src.Name)"
           Copy-Item $src.FullName "electron/out/TradeEdge-Setup-x64.exe"
 
-      - name: Upload Windows installer artifact
+      - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
@@ -62,6 +82,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -73,7 +94,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build frontend
         run: npm run build --workspace=frontend
@@ -97,7 +118,7 @@ jobs:
       - name: Rename APK
         run: cp frontend/android/app/build/outputs/apk/debug/app-debug.apk TradeEdge.apk
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
@@ -124,14 +145,10 @@ jobs:
           path: dist/
         continue-on-error: true
 
-      - name: List artifacts
-        run: ls -la dist/
-
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Derive tag from refs/tags/vX.X.X or refs/heads/release/vX.X.X
           REF="${GITHUB_REF}"
           if [[ "$REF" == refs/tags/* ]]; then
             TAG="${REF#refs/tags/}"
@@ -141,7 +158,6 @@ jobs:
             TAG="v1.0.0"
           fi
 
-          # Build file list — include only files that exist
           FILES=""
           [ -f dist/TradeEdge-Setup-x64.exe ] && FILES="$FILES dist/TradeEdge-Setup-x64.exe"
           [ -f dist/TradeEdge.apk ] && FILES="$FILES dist/TradeEdge.apk"
