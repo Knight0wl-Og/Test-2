@@ -6,20 +6,15 @@ const router = Router();
 // GET /api/watchlists — list all groups with their symbols
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const groups = await db.query(
-      `SELECT id, name, color, position FROM watchlist_groups ORDER BY position ASC, created_at ASC`
+    const result = await db.query(
+      `SELECT g.id, g.name, g.color, g.position,
+              COALESCE(json_agg(s.symbol ORDER BY s.position ASC, s.added_at ASC) FILTER (WHERE s.symbol IS NOT NULL), '[]') AS symbols
+       FROM watchlist_groups g
+       LEFT JOIN watchlist_symbols s ON s.group_id = g.id
+       GROUP BY g.id
+       ORDER BY g.position ASC, g.created_at ASC`
     );
-
-    const symbols = await db.query(
-      `SELECT group_id, symbol, position FROM watchlist_symbols ORDER BY position ASC, added_at ASC`
-    );
-
-    const grouped = groups.rows.map((g) => ({
-      ...g,
-      symbols: symbols.rows.filter((s) => s.group_id === g.id).map((s) => s.symbol),
-    }));
-
-    res.json(grouped);
+    res.json(result.rows);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

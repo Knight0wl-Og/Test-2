@@ -38,21 +38,19 @@ ON CONFLICT (name) DO NOTHING;
 INSERT INTO watchlist_symbols (group_id, symbol, position)
 SELECT id, unnest(ARRAY['SPY', 'QQQ', 'DIA', 'IWM', 'VIX']), generate_series(0, 4)
 FROM watchlist_groups WHERE name = 'Indices'
-ON CONFLICT (name) DO NOTHING;
+ON CONFLICT (group_id, symbol) DO NOTHING;
 
 INSERT INTO watchlist_symbols (group_id, symbol, position)
 SELECT id, unnest(ARRAY['NVDA', 'MSFT', 'GOOGL', 'META', 'PLTR']), generate_series(0, 4)
 FROM watchlist_groups WHERE name = 'AI Plays'
-ON CONFLICT (name) DO NOTHING;
+ON CONFLICT (group_id, symbol) DO NOTHING;
 
--- Prof G (Nolan Gouveia) — Investing Simplified: dividend & income-focused ETFs
 INSERT INTO watchlist_symbols (group_id, symbol, position)
 SELECT id, unnest(ARRAY['VOO', 'SCHD', 'JEPI', 'VYM', 'O', 'VTI']), generate_series(0, 5)
 FROM watchlist_groups WHERE name = 'Prof G · Investing Simplified'
-ON CONFLICT (name) DO NOTHING;
+ON CONFLICT (group_id, symbol) DO NOTHING;
 
--- Minority Mindset (Jaspreet Singh) — wealth building & diversified investing
 INSERT INTO watchlist_symbols (group_id, symbol, position)
 SELECT id, unnest(ARRAY['VOO', 'VTI', 'VNQ', 'SCHD', 'BRK.B', 'MSFT']), generate_series(0, 5)
 FROM watchlist_groups WHERE name = 'Minority Mindset'
-ON CONFLICT (name) DO NOTHING;
+ON CONFLICT (group_id, symbol) DO NOTHING;

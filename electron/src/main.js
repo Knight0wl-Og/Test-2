@@ -4,6 +4,7 @@ const { spawn } = require('child_process');
 const http = require('http');
 
 const isDev = process.env.NODE_ENV !== 'production';
+const resourcesPath = process.resourcesPath;
 let mainWindow = null;
 let backendProcess = null;
 
@@ -28,8 +29,6 @@ function waitForBackend(url, timeoutMs = 30000) {
 function startBackend() {
   if (isDev) return Promise.resolve(); // dev: backend started separately
 
-  // extraResources are placed in process.resourcesPath (works regardless of install dir)
-  const resourcesPath = process.resourcesPath;
   const backendPath = path.join(resourcesPath, 'backend', 'dist', 'index.js');
   backendProcess = spawn(process.execPath, [backendPath], {
     env: {
@@ -82,7 +81,7 @@ async function createWindow() {
     } catch (err) {
       console.error('Backend failed to start:', err);
     }
-    const frontendPath = path.join(process.resourcesPath, 'frontend', 'dist', 'index.html');
+    const frontendPath = path.join(resourcesPath, 'frontend', 'dist', 'index.html');
     mainWindow.loadFile(frontendPath);
     mainWindow.setTitle('TradeEdge');
   }
