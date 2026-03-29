@@ -144,6 +144,7 @@ jobs:
           [ -f dist/TradeEdge.apk ] && FILES="$FILES dist/TradeEdge.apk"
 
           gh release create "$TAG" \
+            --target "${GITHUB_SHA}" \
             --title "TradeEdge $TAG" \
             --notes "## TradeEdge $TAG
 
