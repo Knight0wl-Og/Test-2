@@ -21,6 +21,7 @@
     "appId": "com.tradeedge.app",
     "productName": "TradeEdge",
     "copyright": "Copyright 2025 TradeEdge",
+    "icon": "assets/icon.png",
     "directories": {
       "output": "out",
       "buildResources": "assets"
@@ -56,12 +57,16 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
+      "menuCategory": "TradeEdge",
       "shortcutName": "TradeEdge",
-      "installerHeaderIcon": "assets/icon.ico",
-      "deleteAppDataOnUninstall": false
+      "uninstallDisplayName": "TradeEdge — Professional Trading Terminal",
+      "deleteAppDataOnUninstall": true,
+      "runAfterFinish": true
     },
     "mac": {
       "target": "dmg",

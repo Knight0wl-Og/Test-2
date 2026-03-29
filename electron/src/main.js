@@ -28,15 +28,16 @@ function waitForBackend(url, timeoutMs = 30000) {
 function startBackend() {
   if (isDev) return Promise.resolve(); // dev: backend started separately
 
-  const backendPath = path.join(__dirname, '../../backend/dist/index.js');
+  // extraResources are placed in process.resourcesPath (works regardless of install dir)
+  const resourcesPath = process.resourcesPath;
+  const backendPath = path.join(resourcesPath, 'backend', 'dist', 'index.js');
   backendProcess = spawn(process.execPath, [backendPath], {
     env: {
       ...process.env,
       NODE_ENV: 'production',
       PORT: '3001',
-      // SQLite-mode DATABASE_URL set by installer, falls back to in-memory mock
     },
-    cwd: path.join(__dirname, '../../backend'),
+    cwd: path.join(resourcesPath, 'backend'),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -81,7 +82,7 @@ async function createWindow() {
     } catch (err) {
       console.error('Backend failed to start:', err);
     }
-    const frontendPath = path.join(__dirname, '../../frontend/dist/index.html');
+    const frontendPath = path.join(process.resourcesPath, 'frontend', 'dist', 'index.html');
     mainWindow.loadFile(frontendPath);
     mainWindow.setTitle('TradeEdge');
   }
