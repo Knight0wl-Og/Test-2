@@ -1,0 +1,246 @@
+import { useEffect, useRef, useState } from 'react';
+import {
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+  type CandlestickSeriesOptions,
+  type LineSeriesOptions,
+  type AreaSeriesOptions,
+} from 'lightweight-charts';
+import clsx from 'clsx';
+import { useHistory } from '../../hooks/useHistory';
+import { useQuote } from '../../hooks/useQuotes';
+import type { ChartPeriod, ChartType } from '../../types';
+
+const PERIODS: ChartPeriod[] = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y'];
+const PERIOD_INTERVAL: Record<ChartPeriod, string> = {
+  '1d': '1d', '5d': '1d', '1mo': '1d', '3mo': '1d',
+  '6mo': '1d', '1y': '1wk', '2y': '1wk', '5y': '1mo',
+};
+
+function fmtLarge(n: number | null) {
+  if (!n) return '—';
+  if (n >= 1e12) return '$' + (n / 1e12).toFixed(2) + 'T';
+  if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+  return '$' + n.toLocaleString();
+}
+
+function fmt(n: number, d = 2) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+interface PriceChartProps {
+  symbol: string;
+}
+
+export function PriceChart({ symbol }: PriceChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | ISeriesApi<'Area'> | null>(null);
+  const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+
+  const [chartType, setChartType] = useState<ChartType>('candlestick');
+  const [period, setPeriod] = useState<ChartPeriod>('3mo');
+
+  const { data: quote } = useQuote(symbol);
+  const { data: ohlcv, isLoading } = useHistory(symbol, period, PERIOD_INTERVAL[period]);
+
+  // Create chart once
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const chart = createChart(containerRef.current, {
+      layout: {
+        background: { color: '#0a0a0f' },
+        textColor: '#9ca3af',
+        fontFamily: 'JetBrains Mono, monospace',
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: '#1a1a28' },
+        horzLines: { color: '#1a1a28' },
+      },
+      crosshair: {
+        vertLine: { color: '#374151', labelBackgroundColor: '#1c1c28' },
+        horzLine: { color: '#374151', labelBackgroundColor: '#1c1c28' },
+      },
+      rightPriceScale: { borderColor: '#1f2937' },
+      timeScale: { borderColor: '#1f2937', timeVisible: true },
+      width: containerRef.current.clientWidth,
+      height: 340,
+    });
+
+    chartRef.current = chart;
+
+    // Volume histogram (underneath)
+    const volSeries = chart.addHistogramSeries({
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'volume',
+    });
+    chart.priceScale('volume').applyOptions({
+      scaleMargins: { top: 0.8, bottom: 0 },
+    });
+    volumeRef.current = volSeries;
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (containerRef.current) {
+        chart.applyOptions({ width: containerRef.current.clientWidth });
+      }
+    });
+    resizeObserver.observe(containerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+      volumeRef.current = null;
+    };
+  }, []);
+
+  // Update series when chartType changes
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const chart = chartRef.current;
+
+    // Remove old series
+    if (seriesRef.current) {
+      chart.removeSeries(seriesRef.current);
+      seriesRef.current = null;
+    }
+
+    if (chartType === 'candlestick') {
+      seriesRef.current = chart.addCandlestickSeries({
+        upColor: '#22c55e',
+        downColor: '#ef4444',
+        borderUpColor: '#22c55e',
+        borderDownColor: '#ef4444',
+        wickUpColor: '#22c55e',
+        wickDownColor: '#ef4444',
+      } as Partial<CandlestickSeriesOptions>);
+    } else if (chartType === 'line') {
+      seriesRef.current = chart.addLineSeries({
+        color: '#6366f1',
+        lineWidth: 2,
+      } as Partial<LineSeriesOptions>);
+    } else {
+      seriesRef.current = chart.addAreaSeries({
+        topColor: 'rgba(99, 102, 241, 0.4)',
+        bottomColor: 'rgba(99, 102, 241, 0.0)',
+        lineColor: '#6366f1',
+        lineWidth: 2,
+      } as Partial<AreaSeriesOptions>);
+    }
+  }, [chartType]);
+
+  // Feed data
+  useEffect(() => {
+    if (!seriesRef.current || !volumeRef.current || !ohlcv?.length) return;
+
+    if (chartType === 'candlestick') {
+      (seriesRef.current as ISeriesApi<'Candlestick'>).setData(
+        ohlcv.map((b) => ({
+          time: b.time as unknown as import('lightweight-charts').Time,
+          open: b.open, high: b.high, low: b.low, close: b.close
+        }))
+      );
+    } else {
+      (seriesRef.current as ISeriesApi<'Line'> | ISeriesApi<'Area'>).setData(
+        ohlcv.map((b) => ({
+          time: b.time as unknown as import('lightweight-charts').Time,
+          value: b.close
+        }))
+      );
+    }
+
+    volumeRef.current.setData(
+      ohlcv.map((b) => ({
+        time: b.time as unknown as import('lightweight-charts').Time,
+        value: b.volume,
+        color: b.close >= b.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
+      }))
+    );
+
+    chartRef.current?.timeScale().fitContent();
+  }, [ohlcv, chartType]);
+
+  const isPos = (quote?.changePercent ?? 0) >= 0;
+
+  return (
+    <div className="bg-bg-card border border-border-dim rounded-lg overflow-hidden">
+      {/* Chart header */}
+      <div className="flex items-start justify-between px-4 pt-4 pb-3 border-b border-border-dim flex-wrap gap-3">
+        <div>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <span className="text-lg font-bold text-white">{symbol}</span>
+            {quote && (
+              <>
+                <span className="text-2xl font-bold num text-white">{fmt(quote.price)}</span>
+                <span className={clsx('text-sm font-semibold num', isPos ? 'text-green' : 'text-red')}>
+                  {isPos ? '+' : ''}{fmt(quote.change)} ({isPos ? '+' : ''}{fmt(quote.changePercent)}%)
+                </span>
+              </>
+            )}
+          </div>
+          {quote && (
+            <div className="flex gap-4 mt-1 text-xs text-text-muted flex-wrap">
+              <span>O: <span className="text-gray-300 num">{fmt(quote.open)}</span></span>
+              <span>H: <span className="text-gray-300 num">{fmt(quote.high)}</span></span>
+              <span>L: <span className="text-gray-300 num">{fmt(quote.low)}</span></span>
+              <span>PC: <span className="text-gray-300 num">{fmt(quote.previousClose)}</span></span>
+              {quote.marketCap && (
+                <span>MCap: <span className="text-gray-300">{fmtLarge(quote.marketCap)}</span></span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Controls */}
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {/* Chart type toggle */}
+          <div className="flex bg-bg-hover rounded overflow-hidden text-xs">
+            {(['candlestick', 'line', 'area'] as ChartType[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setChartType(t)}
+                className={clsx(
+                  'px-2 py-1 capitalize transition-colors',
+                  chartType === t ? 'bg-accent text-white' : 'text-text-muted hover:text-gray-200'
+                )}
+              >
+                {t === 'candlestick' ? 'Candle' : t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Period selector */}
+          <div className="flex bg-bg-hover rounded overflow-hidden text-xs">
+            {PERIODS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={clsx(
+                  'px-2 py-1 uppercase transition-colors',
+                  period === p ? 'bg-accent text-white' : 'text-text-muted hover:text-gray-200'
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Chart area */}
+      <div className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 bg-bg-card/80 flex items-center justify-center">
+            <div className="w-5 h-5 border-2 border-border-dim border-t-accent rounded-full animate-spin" />
+          </div>
+        )}
+        <div ref={containerRef} className="w-full" />
+      </div>
+    </div>
+  );
+}

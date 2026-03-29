@@ -1,0 +1,37 @@
+{
+  "name": "tradeedge-electron",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder",
+    "pack": "electron-builder --dir"
+  },
+  "dependencies": {
+    "electron": "^30.0.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.tradeedge.app",
+    "productName": "TradeEdge",
+    "directories": {
+      "output": "out"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
