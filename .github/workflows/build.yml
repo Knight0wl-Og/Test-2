@@ -24,12 +24,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
-      - name: System info
-        shell: pwsh
-        run: |
-          Write-Host "Node $(node --version)  npm $(npm --version)"
-          Write-Host "Working dir: $(Get-Location)"
-
       - name: Install dependencies
         run: npm ci
 
@@ -43,10 +37,15 @@ jobs:
         run: node scripts/prep-backend-bundle.js
 
       - name: Build Windows installer
-        run: npm run build:win --workspace=electron
+        shell: pwsh
+        run: |
+          # Resolve hoisted electron path for electron-builder
+          $electronDir = Join-Path (Get-Location) "node_modules" "electron"
+          $env:ELECTRON_OVERRIDE_DIST_PATH = Join-Path $electronDir "dist"
+          Write-Host "ELECTRON_OVERRIDE_DIST_PATH=$($env:ELECTRON_OVERRIDE_DIST_PATH)"
+          npm run build:win --workspace=electron
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Prevent electron-builder from trying to publish
           EP_DRAFT: true
           EP_PRE_RELEASE: false
 
@@ -56,8 +55,8 @@ jobs:
           $files = Get-ChildItem "electron/out" -Filter "*.exe" -ErrorAction SilentlyContinue
           if (-not $files) {
             Write-Host "Contents of electron/out:"
-            Get-ChildItem "electron/out" -ErrorAction SilentlyContinue
-            Write-Error "No .exe found in electron/out — electron-builder may have failed"
+            Get-ChildItem "electron/out" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+            Write-Error "No .exe found in electron/out"
             exit 1
           }
           $src = $files | Select-Object -First 1
@@ -161,6 +160,8 @@ jobs:
           FILES=""
           [ -f dist/TradeEdge-Setup-x64.exe ] && FILES="$FILES dist/TradeEdge-Setup-x64.exe"
           [ -f dist/TradeEdge.apk ] && FILES="$FILES dist/TradeEdge.apk"
+
+          gh release delete "$TAG" --yes 2>/dev/null || true
 
           gh release create "$TAG" \
             --target "${GITHUB_SHA}" \

@@ -10,16 +10,16 @@
     "build:linux": "electron-builder --linux",
     "build": "electron-builder"
   },
-  "dependencies": {},
   "devDependencies": {
     "cross-env": "^7.0.3",
-    "electron": "30.0.0",
+    "electron": "30.5.1",
     "electron-builder": "^24.13.3"
   },
   "build": {
     "appId": "com.tradeedge.app",
     "productName": "TradeEdge",
     "copyright": "Copyright 2025 TradeEdge",
+    "electronVersion": "30.5.1",
     "icon": "assets/icon.png",
     "directories": {
       "output": "out",
