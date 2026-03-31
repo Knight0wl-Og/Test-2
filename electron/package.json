@@ -19,7 +19,7 @@
     "appId": "com.tradeedge.app",
     "productName": "TradeEdge",
     "copyright": "Copyright 2025 TradeEdge",
-    "electronVersion": "30.5.1",
+    "publish": "never",
     "icon": "assets/icon.png",
     "directories": {
       "output": "out",

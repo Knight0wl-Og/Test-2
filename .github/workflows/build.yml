@@ -36,31 +36,37 @@ jobs:
       - name: Prepare backend node_modules for bundling
         run: node scripts/prep-backend-bundle.js
 
-      - name: Build Windows installer
+      - name: Copy electron to workspace node_modules
         shell: pwsh
         run: |
-          # Resolve hoisted electron path for electron-builder
-          $electronDir = Join-Path (Get-Location) "node_modules" "electron"
-          $env:ELECTRON_OVERRIDE_DIST_PATH = Join-Path $electronDir "dist"
-          Write-Host "ELECTRON_OVERRIDE_DIST_PATH=$($env:ELECTRON_OVERRIDE_DIST_PATH)"
-          npm run build:win --workspace=electron
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EP_DRAFT: true
-          EP_PRE_RELEASE: false
+          # npm workspaces hoists electron to root/node_modules.
+          # electron-builder needs to find it in electron/node_modules.
+          $src = Resolve-Path "node_modules/electron"
+          $dst = "electron/node_modules/electron"
+          New-Item -ItemType Directory -Force "electron/node_modules" | Out-Null
+          if (-not (Test-Path $dst)) {
+            Copy-Item -Recurse -Force $src $dst
+          }
+          $ver = (Get-Content "$dst/package.json" | ConvertFrom-Json).version
+          Write-Host "electron $ver ready at $dst"
+
+      - name: Build Windows installer
+        shell: pwsh
+        working-directory: electron
+        run: npx electron-builder --win --publish=never
 
       - name: Find and rename installer
         shell: pwsh
         run: |
-          $files = Get-ChildItem "electron/out" -Filter "*.exe" -ErrorAction SilentlyContinue
+          $files = Get-ChildItem "electron/out" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
           if (-not $files) {
-            Write-Host "Contents of electron/out:"
-            Get-ChildItem "electron/out" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
-            Write-Error "No .exe found in electron/out"
+            Write-Host "=== electron/out contents ==="
+            Get-ChildItem "electron/out" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+            Write-Error "No .exe found — electron-builder failed"
             exit 1
           }
           $src = $files | Select-Object -First 1
-          Write-Host "Packaging: $($src.Name)"
+          Write-Host "Found: $($src.FullName)"
           Copy-Item $src.FullName "electron/out/TradeEdge-Setup-x64.exe"
 
       - name: Upload Windows installer
