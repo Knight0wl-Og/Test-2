@@ -19,7 +19,7 @@ interface SidebarProps {
 
 export function Sidebar({ active = 'dashboard', onNavigate }: SidebarProps) {
   return (
-    <nav className="w-14 bg-bg-secondary border-r border-border-dim flex flex-col items-center py-3 gap-1 shrink-0">
+    <nav className="hidden lg:flex w-14 bg-bg-secondary border-r border-border-dim flex-col items-center py-3 gap-1 shrink-0">
       {NAV_ITEMS.map(({ icon: Icon, label, id, disabled }) => (
         <button
           key={id}

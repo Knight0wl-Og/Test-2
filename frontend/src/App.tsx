@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from './components/layout/Layout';
-import { WatchlistPanel } from './components/watchlist/WatchlistPanel';
 import { Dashboard } from './pages/Dashboard';
 
 const queryClient = new QueryClient({
@@ -19,15 +18,10 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Layout>
-          <div className="flex h-full">
-            <WatchlistPanel />
-            <div className="flex-1 overflow-auto">
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-              </Routes>
-            </div>
-          </div>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+          </Routes>
         </Layout>
       </BrowserRouter>
     </QueryClientProvider>
