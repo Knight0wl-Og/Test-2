@@ -10,12 +10,24 @@ import {
 import clsx from 'clsx';
 import { useHistory } from '../../hooks/useHistory';
 import { useQuote } from '../../hooks/useQuotes';
-import type { ChartPeriod, ChartType } from '../../types';
+import type { ChartType } from '../../types';
 
-const PERIODS: ChartPeriod[] = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y'];
-const PERIOD_INTERVAL: Record<ChartPeriod, string> = {
-  '1d': '1d', '5d': '1d', '1mo': '1d', '3mo': '1d',
-  '6mo': '1d', '1y': '1wk', '2y': '1wk', '5y': '1mo',
+type Timeframe = '5m' | '15m' | '30m' | '1h' | '4h' | '1d' | '1w';
+
+const TIMEFRAMES: Timeframe[] = ['5m', '15m', '30m', '1h', '4h', '1d', '1w'];
+
+const TIMEFRAME_LABELS: Record<Timeframe, string> = {
+  '5m': '5M', '15m': '15M', '30m': '30M', '1h': '1H', '4h': '4H', '1d': '1D', '1w': '1W',
+};
+
+const TIMEFRAME_CONFIG: Record<Timeframe, { period: string; interval: string }> = {
+  '5m':  { period: '1d',  interval: '5m'   },
+  '15m': { period: '5d',  interval: '15m'  },
+  '30m': { period: '1mo', interval: '30m'  },
+  '1h':  { period: '3mo', interval: '60m'  },
+  '4h':  { period: '6mo', interval: '1h'   },
+  '1d':  { period: '1y',  interval: '1d'   },
+  '1w':  { period: '5y',  interval: '1wk'  },
 };
 
 function fmtLarge(n: number | null) {
@@ -41,10 +53,14 @@ export function PriceChart({ symbol }: PriceChartProps) {
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
   const [chartType, setChartType] = useState<ChartType>('candlestick');
-  const [period, setPeriod] = useState<ChartPeriod>('3mo');
+  const [timeframe, setTimeframe] = useState<Timeframe>('1d');
 
   const { data: quote } = useQuote(symbol);
-  const { data: ohlcv, isLoading } = useHistory(symbol, period, PERIOD_INTERVAL[period]);
+  const { data: ohlcv, isLoading } = useHistory(
+    symbol,
+    TIMEFRAME_CONFIG[timeframe].period,
+    TIMEFRAME_CONFIG[timeframe].interval,
+  );
 
   // Create chart once
   useEffect(() => {
@@ -214,18 +230,18 @@ export function PriceChart({ symbol }: PriceChartProps) {
             ))}
           </div>
 
-          {/* Period selector */}
+          {/* Timeframe selector */}
           <div className="flex bg-bg-hover rounded overflow-hidden text-xs">
-            {PERIODS.map((p) => (
+            {TIMEFRAMES.map((tf) => (
               <button
-                key={p}
-                onClick={() => setPeriod(p)}
+                key={tf}
+                onClick={() => setTimeframe(tf)}
                 className={clsx(
-                  'px-2 py-1 uppercase transition-colors',
-                  period === p ? 'bg-accent text-white' : 'text-text-muted hover:text-gray-200'
+                  'px-2 py-1 transition-colors',
+                  timeframe === tf ? 'bg-accent text-white' : 'text-text-muted hover:text-gray-200'
                 )}
               >
-                {p}
+                {TIMEFRAME_LABELS[tf]}
               </button>
             ))}
           </div>

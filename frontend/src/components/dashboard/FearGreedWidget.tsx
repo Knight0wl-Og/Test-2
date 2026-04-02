@@ -51,7 +51,7 @@ function Gauge({ value }: GaugeProps) {
   const needleTip = polarToXY(needleAngle, radius - 6);
 
   return (
-    <svg viewBox="0 0 120 70" className="w-full max-w-[160px]">
+    <svg viewBox="0 0 120 80" className="w-full max-w-[160px]">
       {/* Background arc */}
       <path
         d={`M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcBg} 1 ${end.x} ${end.y}`}

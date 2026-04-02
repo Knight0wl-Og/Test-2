@@ -2,6 +2,7 @@ import { MarketOverview } from '../components/dashboard/MarketOverview';
 import { SectorHeatmap } from '../components/dashboard/SectorHeatmap';
 import { VIXWidget } from '../components/dashboard/VIXWidget';
 import { FearGreedWidget } from '../components/dashboard/FearGreedWidget';
+import { CreatorInsights } from '../components/dashboard/CreatorInsights';
 import { PriceChart } from '../components/chart/PriceChart';
 import { useWatchlistStore } from '../store/watchlistStore';
 
@@ -28,6 +29,9 @@ export function Dashboard() {
 
           {/* Sector heatmap */}
           <SectorHeatmap />
+
+          {/* Creator picks & philosophy */}
+          <CreatorInsights />
         </div>
 
         {/* Right column — widgets */}
