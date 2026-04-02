@@ -25,7 +25,7 @@ export function IndexCard({ quote, onClick, selected }: IndexCardProps) {
     <button
       onClick={onClick}
       className={clsx(
-        'bg-bg-card border rounded-lg p-3 text-left transition-all hover:border-accent/50 w-full',
+        'bg-bg-card border rounded-lg p-3 text-left transition-all hover:border-accent/50 w-full shrink-0 min-w-[120px] lg:min-w-0',
         selected ? 'border-accent' : 'border-border-dim'
       )}
     >
@@ -45,7 +45,7 @@ export function IndexCard({ quote, onClick, selected }: IndexCardProps) {
       </div>
 
       <div className="mt-2 flex items-end justify-between gap-2">
-        <span className={clsx('text-xl font-bold num', isPositive ? 'text-white' : 'text-white')}>
+        <span className={clsx('text-base font-bold num text-white')}>
           {fmt(quote.price)}
         </span>
         <span className={clsx('text-xs num', isPositive ? 'text-green' : 'text-red')}>
@@ -63,7 +63,7 @@ export function IndexCard({ quote, onClick, selected }: IndexCardProps) {
 
 export function IndexCardSkeleton() {
   return (
-    <div className="bg-bg-card border border-border-dim rounded-lg p-3 space-y-2">
+    <div className="bg-bg-card border border-border-dim rounded-lg p-3 space-y-2 shrink-0 min-w-[120px] lg:min-w-0">
       <div className="flex justify-between">
         <div className="skeleton h-3 w-12" />
         <div className="skeleton h-4 w-14" />

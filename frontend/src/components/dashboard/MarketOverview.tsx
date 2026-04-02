@@ -17,7 +17,7 @@ export function MarketOverview() {
       <h2 className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-3">
         Market Overview
       </h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+      <div className="flex gap-2 overflow-x-auto pb-1 lg:grid lg:grid-cols-7 lg:overflow-x-visible">
         {isLoading
           ? Array.from({ length: 7 }).map((_, i) => <IndexCardSkeleton key={i} />)
           : display.map((q) =>
