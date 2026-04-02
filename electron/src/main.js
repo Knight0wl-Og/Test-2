@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
@@ -8,7 +8,38 @@ const resourcesPath = process.resourcesPath;
 let mainWindow = null;
 let backendProcess = null;
 
-// Poll health endpoint until backend is ready or timeout
+// ── Auto-updater ──────────────────────────────────────────────────────────────
+function initAutoUpdater() {
+  if (isDev) return;
+  try {
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('update-downloaded', () => {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Update Ready',
+        message: 'A new version of TradeEdge has been downloaded. It will be installed when you quit.',
+        buttons: ['Restart Now', 'Later'],
+        defaultId: 0,
+      }).then(({ response }) => {
+        if (response === 0) autoUpdater.quitAndInstall();
+      });
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.warn('[updater] error:', err.message);
+    });
+
+    // Check after window is ready to avoid blocking startup
+    app.whenReady().then(() => setTimeout(() => autoUpdater.checkForUpdates(), 5000));
+  } catch (err) {
+    console.warn('[updater] not available:', err.message);
+  }
+}
+
+// ── Backend ───────────────────────────────────────────────────────────────────
 function waitForBackend(url, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const start = Date.now();
@@ -27,15 +58,11 @@ function waitForBackend(url, timeoutMs = 30000) {
 }
 
 function startBackend() {
-  if (isDev) return Promise.resolve(); // dev: backend started separately
+  if (isDev) return Promise.resolve();
 
   const backendPath = path.join(resourcesPath, 'backend', 'dist', 'index.js');
   backendProcess = spawn(process.execPath, [backendPath], {
-    env: {
-      ...process.env,
-      NODE_ENV: 'production',
-      PORT: '3001',
-    },
+    env: { ...process.env, NODE_ENV: 'production', PORT: '3001' },
     cwd: path.join(resourcesPath, 'backend'),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -47,6 +74,7 @@ function startBackend() {
   return waitForBackend('http://localhost:3001/health');
 }
 
+// ── Window ────────────────────────────────────────────────────────────────────
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -55,10 +83,7 @@ async function createWindow() {
     minHeight: 640,
     backgroundColor: '#0a0a0f',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
     show: false,
     title: 'TradeEdge — Starting...',
   });
@@ -68,7 +93,6 @@ async function createWindow() {
     return { action: 'deny' };
   });
 
-  // Show a simple loading HTML while backend starts
   mainWindow.loadURL(`data:text/html,<html style="background:#0a0a0f;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;color:#6366f1"><div style="text-align:center"><div style="font-size:32px;font-weight:bold;letter-spacing:4px;margin-bottom:16px">TRADEEDGE</div><div style="color:#6b7280;font-size:14px">Starting services...</div></div></html>`);
   mainWindow.show();
 
@@ -81,15 +105,18 @@ async function createWindow() {
     } catch (err) {
       console.error('Backend failed to start:', err);
     }
-    const frontendPath = path.join(resourcesPath, 'frontend', 'dist', 'index.html');
-    mainWindow.loadFile(frontendPath);
+    mainWindow.loadFile(path.join(resourcesPath, 'frontend', 'dist', 'index.html'));
     mainWindow.setTitle('TradeEdge');
   }
 
   mainWindow.once('ready-to-show', () => mainWindow.focus());
 }
 
-app.whenReady().then(createWindow);
+// ── App lifecycle ─────────────────────────────────────────────────────────────
+app.whenReady().then(() => {
+  createWindow();
+  initAutoUpdater();
+});
 
 app.on('before-quit', () => {
   if (backendProcess) {

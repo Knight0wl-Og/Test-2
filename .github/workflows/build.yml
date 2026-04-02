@@ -39,41 +39,49 @@ jobs:
       - name: Copy electron to workspace node_modules
         shell: pwsh
         run: |
-          # npm workspaces hoists electron to root/node_modules.
-          # electron-builder needs to find it in electron/node_modules.
           $src = Resolve-Path "node_modules/electron"
           $dst = "electron/node_modules/electron"
           New-Item -ItemType Directory -Force "electron/node_modules" | Out-Null
-          if (-not (Test-Path $dst)) {
-            Copy-Item -Recurse -Force $src $dst
-          }
+          if (-not (Test-Path $dst)) { Copy-Item -Recurse -Force $src $dst }
           $ver = (Get-Content "$dst/package.json" | ConvertFrom-Json).version
-          Write-Host "electron $ver ready at $dst"
+          Write-Host "electron $ver ready"
+
+      - name: Copy electron-updater to workspace node_modules
+        shell: pwsh
+        run: |
+          $src = Resolve-Path "node_modules/electron-updater"
+          $dst = "electron/node_modules/electron-updater"
+          New-Item -ItemType Directory -Force "electron/node_modules" | Out-Null
+          if (-not (Test-Path $dst)) { Copy-Item -Recurse -Force $src $dst }
+          Write-Host "electron-updater ready"
 
       - name: Build Windows installer
         shell: pwsh
         working-directory: electron
-        run: npx electron-builder --win --publish=never
+        run: npx electron-builder --win --publish=always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Find and rename installer
         shell: pwsh
         run: |
           $files = Get-ChildItem "electron/out" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
           if (-not $files) {
-            Write-Host "=== electron/out contents ==="
             Get-ChildItem "electron/out" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-            Write-Error "No .exe found — electron-builder failed"
+            Write-Error "No .exe found"
             exit 1
           }
           $src = $files | Select-Object -First 1
           Write-Host "Found: $($src.FullName)"
           Copy-Item $src.FullName "electron/out/TradeEdge-Setup-x64.exe"
 
-      - name: Upload Windows installer
+      - name: Upload Windows installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: electron/out/TradeEdge-Setup-x64.exe
+          path: |
+            electron/out/TradeEdge-Setup-x64.exe
+            electron/out/latest.yml
           retention-days: 3
 
   build-android:
@@ -104,6 +112,9 @@ jobs:
       - name: Build frontend
         run: npm run build --workspace=frontend
 
+      - name: Create web bundle for OTA updates
+        run: cd frontend/dist && zip -r ../../bundle.zip .
+
       - name: Add Android platform
         working-directory: frontend
         run: npx cap add android 2>/dev/null || true
@@ -123,11 +134,13 @@ jobs:
       - name: Rename APK
         run: cp frontend/android/app/build/outputs/apk/debug/app-debug.apk TradeEdge.apk
 
-      - name: Upload APK
+      - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: TradeEdge.apk
+          name: android-artifacts
+          path: |
+            TradeEdge.apk
+            bundle.zip
           retention-days: 3
 
   create-release:
@@ -143,10 +156,10 @@ jobs:
           name: windows-installer
           path: dist/
 
-      - name: Download Android APK
+      - name: Download Android artifacts
         uses: actions/download-artifact@v4
         with:
-          name: android-apk
+          name: android-artifacts
           path: dist/
         continue-on-error: true
 
@@ -165,7 +178,9 @@ jobs:
 
           FILES=""
           [ -f dist/TradeEdge-Setup-x64.exe ] && FILES="$FILES dist/TradeEdge-Setup-x64.exe"
+          [ -f dist/latest.yml ] && FILES="$FILES dist/latest.yml"
           [ -f dist/TradeEdge.apk ] && FILES="$FILES dist/TradeEdge.apk"
+          [ -f dist/bundle.zip ] && FILES="$FILES dist/bundle.zip"
 
           gh release delete "$TAG" --yes 2>/dev/null || true
 
@@ -177,16 +192,15 @@ jobs:
           ### Downloads
           | Platform | File | Notes |
           |---|---|---|
-          | Windows 10/11 (64-bit) | \`TradeEdge-Setup-x64.exe\` | Run installer — no admin rights needed |
+          | Windows 10/11 (64-bit) | \`TradeEdge-Setup-x64.exe\` | Installer — auto-updates silently after install |
           | Android 7+ | \`TradeEdge.apk\` | Enable \"Install unknown apps\", tap APK to install |
 
-          ### Quick Start
-          Both apps launch with **demo market data** immediately — no account, backend, or internet required.
+          ### Auto-Updates
+          - **Windows**: The app checks for updates on launch and installs them when you quit.
+          - **Android**: The app downloads new versions silently and reloads automatically.
 
-          ### Connect Android to Live Data
-          1. Run \`npm run dev\` on your PC (or deploy backend to Render/Railway)
-          2. Open app → tap ⚙ → enter your backend URL (e.g. \`http://192.168.1.x:3001\`)
-          3. Tap **Save & Reload**
+          ### Quick Start
+          Both apps launch with **live market data** immediately — no backend required.
 
           See [INSTALL.md](https://github.com/${{ github.repository }}/blob/main/INSTALL.md) for full setup instructions." \
             $FILES

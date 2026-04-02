@@ -18,6 +18,9 @@ const config: CapacitorConfig = {
     },
   },
   plugins: {
+    LiveUpdate: {
+      autoDeleteBundles: true,
+    },
     SplashScreen: {
       launchShowDuration: 2000,
       backgroundColor: '#0a0a0f',
