@@ -31,20 +31,25 @@ export async function checkForUpdates(): Promise<void> {
     if (res.status !== 200) return;
 
     const release = res.data;
-    const latestTag: string = release.tag_name; // e.g. "v1.0.2"
+
+    // Use the bundle.zip asset's updated_at as the version ID so that every
+    // new upload (even to the same release tag) is detected as an update.
+    const asset = (release.assets as Array<{
+      name: string;
+      browser_download_url: string;
+      updated_at: string;
+    }>).find((a) => a.name === 'bundle.zip');
+    if (!asset) return;
+
+    const bundleVersion = asset.updated_at; // e.g. "2026-04-03T18:00:00Z"
 
     // Compare with currently running bundle
     const { bundleId: currentBundleId } = await LiveUpdate.getCurrentBundle();
-    if (currentBundleId === latestTag) return; // already up to date
-
-    // Find bundle.zip in the release assets
-    const asset = (release.assets as Array<{ name: string; browser_download_url: string }>)
-      .find((a) => a.name === 'bundle.zip');
-    if (!asset) return;
+    if (currentBundleId === bundleVersion) return; // already up to date
 
     // Download, stage, and apply
-    await LiveUpdate.downloadBundle({ bundleId: latestTag, url: asset.browser_download_url });
-    await LiveUpdate.setNextBundle({ bundleId: latestTag });
+    await LiveUpdate.downloadBundle({ bundleId: bundleVersion, url: asset.browser_download_url });
+    await LiveUpdate.setNextBundle({ bundleId: bundleVersion });
     await LiveUpdate.reload();
   } catch (err) {
     console.warn('[liveUpdate] update check failed:', err);
