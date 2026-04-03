@@ -1,12 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, Bell, Settings, Activity, PanelLeft, X, Wifi, Check } from 'lucide-react';
+import {
+  Search, Bell, Settings, Activity, PanelLeft, X, Wifi,
+  Check, RefreshCw, Download, AlertCircle, RotateCcw,
+} from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { useMarketStatus } from '../../hooks/useMarketData';
+import { checkAndDownload, applyUpdate, type UpdateProgress } from '../../services/liveUpdate';
 import clsx from 'clsx';
 
 interface HeaderProps {
   onSearch?: (query: string) => void;
   onToggleWatchlist?: () => void;
 }
+
+// ─── Notifications ────────────────────────────────────────────────────────────
 
 function NotificationsDropdown({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -39,6 +46,116 @@ function NotificationsDropdown({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── Update Section ───────────────────────────────────────────────────────────
+
+function UpdateSection() {
+  const [upd, setUpd] = useState<UpdateProgress>({ state: 'idle', progress: 0 });
+  const isNative = Capacitor.isNativePlatform();
+
+  if (!isNative) {
+    return (
+      <div className="border-t border-border-dim pt-4 mt-1">
+        <p className="text-xs text-text-muted mb-2 uppercase tracking-widest">Updates</p>
+        <p className="text-xs text-text-muted/60 leading-relaxed">
+          Windows updates are handled automatically by electron-updater on next launch.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-border-dim pt-4 mt-1">
+      <p className="text-xs text-text-muted mb-3 uppercase tracking-widest">Updates</p>
+
+      {upd.state === 'idle' && (
+        <button
+          onClick={() => checkAndDownload(setUpd)}
+          className="w-full flex items-center justify-center gap-2 bg-bg-hover hover:bg-border-dim border border-border-dim rounded py-2 text-sm text-gray-200 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Check for Updates
+        </button>
+      )}
+
+      {upd.state === 'checking' && (
+        <div className="flex items-center gap-2.5 text-xs text-text-muted py-1">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+          Checking for updates…
+        </div>
+      )}
+
+      {upd.state === 'downloading' && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-text-muted">
+            <div className="flex items-center gap-2">
+              <Download className="w-3.5 h-3.5 animate-bounce shrink-0" />
+              <span>Downloading update…</span>
+            </div>
+            <span className="font-mono">{upd.progress}%</span>
+          </div>
+          <div className="h-1.5 bg-bg-hover rounded-full overflow-hidden">
+            <div
+              className="h-full bg-accent rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${upd.progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {upd.state === 'up-to-date' && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-green py-1">
+            <Check className="w-3.5 h-3.5 shrink-0" />
+            You're on the latest version
+          </div>
+          <button
+            onClick={() => setUpd({ state: 'idle', progress: 0 })}
+            className="text-xs text-text-muted hover:text-gray-300 underline"
+          >
+            Check again
+          </button>
+        </div>
+      )}
+
+      {upd.state === 'ready' && (
+        <div className="space-y-3">
+          <div className="h-1.5 bg-bg-hover rounded-full overflow-hidden">
+            <div className="h-full w-full bg-green rounded-full" />
+          </div>
+          <div className="flex items-center gap-2 text-xs text-green">
+            <Check className="w-3.5 h-3.5 shrink-0" />
+            Update downloaded — restart to apply
+          </div>
+          <button
+            onClick={applyUpdate}
+            className="w-full flex items-center justify-center gap-2 bg-green/20 hover:bg-green/30 border border-green/40 text-green rounded py-2 text-sm font-medium transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Restart Now
+          </button>
+        </div>
+      )}
+
+      {upd.state === 'error' && (
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-xs text-red-400">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>{upd.message}</span>
+          </div>
+          <button
+            onClick={() => checkAndDownload(setUpd)}
+            className="text-xs text-text-muted hover:text-gray-300 underline"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Settings Modal ───────────────────────────────────────────────────────────
+
 function SettingsModal({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState(
     localStorage.getItem('TRADEEDGE_API_URL') || 'http://localhost:3001'
@@ -56,7 +173,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="bg-bg-card border border-border-dim rounded-xl p-6 w-full max-w-sm mx-4">
+      <div className="bg-bg-card border border-border-dim rounded-xl p-6 w-full max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
             <Settings className="w-4 h-4 text-accent" />
@@ -85,7 +202,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-2">
           <button
             onClick={save}
             className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent-hover text-white rounded py-2 text-sm font-medium transition-colors"
@@ -101,8 +218,11 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
+        {/* Update section */}
+        <UpdateSection />
+
         {/* Danger zone */}
-        <div className="border-t border-border-dim pt-4">
+        <div className="border-t border-border-dim pt-4 mt-4">
           <p className="text-xs text-text-muted mb-2">Danger zone</p>
           <button
             onClick={resetWatchlists}
@@ -118,6 +238,8 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── Header ───────────────────────────────────────────────────────────────────
+
 export function Header({ onSearch, onToggleWatchlist }: HeaderProps) {
   const [query, setQuery] = useState('');
   const { data: status } = useMarketStatus();
@@ -132,7 +254,6 @@ export function Header({ onSearch, onToggleWatchlist }: HeaderProps) {
 
   return (
     <header className="h-12 bg-bg-secondary border-b border-border-dim flex items-center px-3 gap-3 shrink-0">
-      {/* Watchlist toggle — mobile only */}
       <button
         onClick={onToggleWatchlist}
         className="lg:hidden text-text-muted hover:text-gray-200 transition-colors shrink-0"
@@ -141,13 +262,11 @@ export function Header({ onSearch, onToggleWatchlist }: HeaderProps) {
         <PanelLeft className="w-5 h-5" />
       </button>
 
-      {/* Logo */}
       <div className="flex items-center gap-2 shrink-0">
         <Activity className="w-5 h-5 text-accent" />
         <span className="font-bold text-sm tracking-wider text-white">TRADEEDGE</span>
       </div>
 
-      {/* Search */}
       <form onSubmit={handleSearch} className="flex-1 min-w-0 max-w-md">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" />
@@ -162,7 +281,6 @@ export function Header({ onSearch, onToggleWatchlist }: HeaderProps) {
       </form>
 
       <div className="ml-auto flex items-center gap-2 shrink-0">
-        {/* Market status */}
         <div className="flex items-center gap-1.5 text-xs">
           <span className={clsx('w-2 h-2 rounded-full shrink-0', isOpen ? 'bg-green animate-pulse' : 'bg-text-muted')} />
           <span className={clsx('font-medium hidden sm:inline', isOpen ? 'text-green' : 'text-text-muted')}>
@@ -173,23 +291,16 @@ export function Header({ onSearch, onToggleWatchlist }: HeaderProps) {
           </span>
         </div>
 
-        {/* Notifications */}
         <div className="relative">
           <button
             onClick={() => setShowNotifications((v) => !v)}
-            className={clsx(
-              'text-text-muted hover:text-gray-200 transition-colors',
-              showNotifications && 'text-gray-200'
-            )}
+            className={clsx('text-text-muted hover:text-gray-200 transition-colors', showNotifications && 'text-gray-200')}
           >
             <Bell className="w-4 h-4" />
           </button>
-          {showNotifications && (
-            <NotificationsDropdown onClose={() => setShowNotifications(false)} />
-          )}
+          {showNotifications && <NotificationsDropdown onClose={() => setShowNotifications(false)} />}
         </div>
 
-        {/* Settings */}
         <button
           onClick={() => setShowSettings(true)}
           className="text-text-muted hover:text-gray-200 transition-colors"

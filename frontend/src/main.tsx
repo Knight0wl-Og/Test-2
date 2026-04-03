@@ -2,10 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
-import { confirmBundle, checkForUpdates } from './services/liveUpdate';
+import { confirmBundle } from './services/liveUpdate';
 import { syncEarningsWatchlist } from './services/earningsSync';
 
-// Confirm the running bundle is good (prevents auto-rollback)
+// Confirm the running bundle is stable (prevents auto-rollback on crash)
 confirmBundle();
 
 createRoot(document.getElementById('root')!).render(
@@ -14,7 +14,5 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>
 );
 
-// Sync earnings calendar to watchlist (non-blocking, 2s after mount)
+// Sync earnings calendar into the watchlist 2s after mount (non-blocking)
 setTimeout(syncEarningsWatchlist, 2000);
-// Check for OTA updates (non-blocking, 4s after mount)
-setTimeout(checkForUpdates, 4000);
