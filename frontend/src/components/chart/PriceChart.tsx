@@ -186,42 +186,45 @@ export function PriceChart({ symbol }: PriceChartProps) {
   return (
     <div className="bg-bg-card border border-border-dim rounded-lg overflow-hidden">
       {/* Chart header */}
-      <div className="flex items-start justify-between px-4 pt-4 pb-3 border-b border-border-dim flex-wrap gap-3">
-        <div>
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <span className="text-lg font-bold text-white">{symbol}</span>
-            {quote && (
-              <>
-                <span className="text-2xl font-bold num text-white">{fmt(quote.price)}</span>
-                <span className={clsx('text-sm font-semibold num', isPos ? 'text-green' : 'text-red')}>
-                  {isPos ? '+' : ''}{fmt(quote.change)} ({isPos ? '+' : ''}{fmt(quote.changePercent)}%)
-                </span>
-              </>
-            )}
-          </div>
-          {quote && (
-            <div className="flex gap-4 mt-1 text-xs text-text-muted flex-wrap">
-              <span>O: <span className="text-gray-300 num">{fmt(quote.open)}</span></span>
-              <span>H: <span className="text-gray-300 num">{fmt(quote.high)}</span></span>
-              <span>L: <span className="text-gray-300 num">{fmt(quote.low)}</span></span>
-              <span>PC: <span className="text-gray-300 num">{fmt(quote.previousClose)}</span></span>
-              {quote.marketCap && (
-                <span>MCap: <span className="text-gray-300">{fmtLarge(quote.marketCap)}</span></span>
+      <div className="px-4 pt-4 pb-3 border-b border-border-dim space-y-2">
+        {/* Price info */}
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <span className="text-lg font-bold text-white">{symbol}</span>
+              {quote && (
+                <>
+                  <span className="text-2xl font-bold num text-white">{fmt(quote.price)}</span>
+                  <span className={clsx('text-sm font-semibold num', isPos ? 'text-green' : 'text-red')}>
+                    {isPos ? '+' : ''}{fmt(quote.change)} ({isPos ? '+' : ''}{fmt(quote.changePercent)}%)
+                  </span>
+                </>
               )}
             </div>
-          )}
+            {quote && (
+              <div className="flex gap-4 mt-1 text-xs text-text-muted flex-wrap">
+                <span>O: <span className="text-gray-300 num">{fmt(quote.open)}</span></span>
+                <span>H: <span className="text-gray-300 num">{fmt(quote.high)}</span></span>
+                <span>L: <span className="text-gray-300 num">{fmt(quote.low)}</span></span>
+                <span>PC: <span className="text-gray-300 num">{fmt(quote.previousClose)}</span></span>
+                {quote.marketCap && (
+                  <span>MCap: <span className="text-gray-300">{fmtLarge(quote.marketCap)}</span></span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Controls */}
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
+        {/* Controls row — scrollable on mobile */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-0.5 no-scrollbar">
           {/* Chart type toggle */}
-          <div className="flex bg-bg-hover rounded overflow-hidden text-xs">
+          <div className="flex bg-bg-hover rounded overflow-hidden text-xs shrink-0">
             {(['candlestick', 'line', 'area'] as ChartType[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setChartType(t)}
                 className={clsx(
-                  'px-2 py-1 capitalize transition-colors',
+                  'px-2.5 py-1.5 capitalize transition-colors',
                   chartType === t ? 'bg-accent text-white' : 'text-text-muted hover:text-gray-200'
                 )}
               >
@@ -230,14 +233,17 @@ export function PriceChart({ symbol }: PriceChartProps) {
             ))}
           </div>
 
+          {/* Divider */}
+          <div className="w-px h-4 bg-border-dim shrink-0" />
+
           {/* Timeframe selector */}
-          <div className="flex bg-bg-hover rounded overflow-hidden text-xs">
+          <div className="flex bg-bg-hover rounded overflow-hidden text-xs shrink-0">
             {TIMEFRAMES.map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
                 className={clsx(
-                  'px-2 py-1 transition-colors',
+                  'px-2.5 py-1.5 transition-colors',
                   timeframe === tf ? 'bg-accent text-white' : 'text-text-muted hover:text-gray-200'
                 )}
               >
