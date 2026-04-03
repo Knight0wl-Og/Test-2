@@ -1,15 +1,15 @@
-import { LayoutDashboard, LineChart, Search, BookOpen, Bot, BarChart2, Briefcase, Bell } from 'lucide-react';
+import { LayoutDashboard, Search, BookOpen, Bot, TrendingUp, Briefcase, Bell, LineChart } from 'lucide-react';
 import clsx from 'clsx';
 
 const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
-  { icon: Search, label: 'Scanner', id: 'scanner', disabled: true },
-  { icon: BookOpen, label: 'Research', id: 'research', disabled: true },
-  { icon: BarChart2, label: 'Options', id: 'options', disabled: true },
-  { icon: LineChart, label: 'Top 10', id: 'top10', disabled: true },
-  { icon: Bot, label: 'AI Copilot', id: 'copilot', disabled: true },
-  { icon: Bell, label: 'Alerts', id: 'alerts', disabled: true },
-  { icon: Briefcase, label: 'Portfolio', id: 'portfolio', disabled: true },
+  { icon: LayoutDashboard, label: 'Dashboard',  id: 'dashboard' },
+  { icon: TrendingUp,      label: 'Top 10',     id: 'top10' },
+  { icon: Search,          label: 'Scanner',    id: 'scanner',   disabled: true },
+  { icon: BookOpen,        label: 'Research',   id: 'research',  disabled: true },
+  { icon: LineChart,       label: 'Options',    id: 'options',   disabled: true },
+  { icon: Bot,             label: 'AI Copilot', id: 'copilot',   disabled: true },
+  { icon: Bell,            label: 'Alerts',     id: 'alerts',    disabled: true },
+  { icon: Briefcase,       label: 'Portfolio',  id: 'portfolio', disabled: true },
 ];
 
 interface SidebarProps {
@@ -36,7 +36,6 @@ export function Sidebar({ active = 'dashboard', onNavigate }: SidebarProps) {
           )}
         >
           <Icon className="w-4.5 h-4.5" size={18} />
-          {/* Tooltip */}
           <span className="absolute left-full ml-2 px-2 py-1 bg-bg-card border border-border-dim rounded text-xs text-gray-200 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
             {label}
             {disabled && <span className="text-text-muted ml-1">(soon)</span>}

@@ -5,6 +5,7 @@ import {
   fetchQuoteNative, fetchBatchQuotesNative, fetchHistoryNative,
   fetchIndicesNative, fetchSectorsNative, fetchFearGreedNative, fetchMarketStatusNative,
 } from './nativeMarket';
+import { fetchEarningsThisWeekNative } from './earningsSync';
 import {
   fetchWatchlistsNative, createWatchlistNative, updateWatchlistNative,
   deleteWatchlistNative, addSymbolToWatchlistNative, removeSymbolFromWatchlistNative,
@@ -76,6 +77,12 @@ export async function fetchFearGreed(): Promise<FearGreedData> {
 export async function fetchMarketStatus(): Promise<{ marketOpen: boolean }> {
   if (isNative()) return fetchMarketStatusNative();
   const { data } = await api.get<{ marketOpen: boolean }>('/api/market/status');
+  return data;
+}
+
+export async function fetchEarningsThisWeek(): Promise<string[]> {
+  if (isNative()) return fetchEarningsThisWeekNative();
+  const { data } = await api.get<string[]>('/api/market/earnings-week');
   return data;
 }
 

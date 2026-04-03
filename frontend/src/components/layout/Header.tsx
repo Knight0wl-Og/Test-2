@@ -112,7 +112,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <p className="text-xs text-text-muted/50 mt-4 text-center">TradeEdge v1.0.0</p>
+        <p className="text-xs text-text-muted/50 mt-4 text-center">TradeEdge v1.0.2</p>
       </div>
     </div>
   );
