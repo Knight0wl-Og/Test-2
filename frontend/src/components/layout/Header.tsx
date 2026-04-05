@@ -137,16 +137,17 @@ function UpdateSection() {
       )}
 
       {upd.state === 'error' && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="flex items-start gap-2 text-xs text-red-400">
             <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <span>{upd.message}</span>
           </div>
           <button
             onClick={() => checkAndDownload(setUpd)}
-            className="text-xs text-text-muted hover:text-gray-300 underline"
+            className="w-full flex items-center justify-center gap-2 bg-bg-hover hover:bg-border-dim border border-border-dim rounded py-2 text-sm text-gray-200 transition-colors"
           >
-            Try again
+            <RefreshCw className="w-4 h-4" />
+            Try Again
           </button>
         </div>
       )}

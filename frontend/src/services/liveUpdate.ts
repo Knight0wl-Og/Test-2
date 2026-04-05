@@ -42,8 +42,16 @@ export async function checkAndDownload(
       headers: { Accept: 'application/vnd.github.v3+json' },
     });
 
+    if (res.status === 404) {
+      onUpdate({ state: 'error', progress: 0, message: 'No release found yet. Try again later.' });
+      return;
+    }
+    if (res.status === 403) {
+      onUpdate({ state: 'error', progress: 0, message: 'Rate limited by GitHub. Wait a few minutes and try again.' });
+      return;
+    }
     if (res.status !== 200) {
-      onUpdate({ state: 'error', progress: 0, message: 'Could not reach update server.' });
+      onUpdate({ state: 'error', progress: 0, message: `Update server returned an unexpected response (${res.status}).` });
       return;
     }
 
@@ -83,7 +91,7 @@ export async function checkAndDownload(
       onUpdate({ state: 'error', progress: 0, message: 'Download failed. Please try again.' });
     }
   } catch {
-    onUpdate({ state: 'error', progress: 0, message: 'Network error. Check your connection.' });
+    onUpdate({ state: 'error', progress: 0, message: 'Network error — check your connection and try again.' });
   }
 }
 
