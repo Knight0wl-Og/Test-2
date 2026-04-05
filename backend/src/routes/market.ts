@@ -137,4 +137,111 @@ router.get('/earnings-week', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/market/research/:symbol
+router.get('/research/:symbol', async (req: Request, res: Response) => {
+  const { symbol } = req.params;
+  try {
+    const data = await cached(`market:research:${symbol}`, 300, async () => {
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,financialData,recommendationTrend,assetProfile,defaultKeyStatistics`;
+      const r = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          Accept: 'application/json',
+        },
+        timeout: 10000,
+      });
+
+      const result = r.data?.quoteSummary?.result?.[0];
+      if (!result) throw new Error('No data');
+
+      const profile = result.assetProfile ?? {};
+      const financials = result.financialData ?? {};
+      const keyStats = result.defaultKeyStatistics ?? {};
+      const reco = result.recommendationTrend?.trend?.[0] ?? {};
+
+      return {
+        symbol: symbol.toUpperCase(),
+        shortName: profile.longName ?? symbol,
+        longBusinessSummary: profile.longBusinessSummary ?? '',
+        sector: profile.sector ?? '',
+        industry: profile.industry ?? '',
+        website: profile.website ?? '',
+        employees: profile.fullTimeEmployees ?? null,
+        trailingPE: keyStats.trailingPE?.raw ?? null,
+        forwardPE: keyStats.forwardPE?.raw ?? null,
+        eps: keyStats.trailingEps?.raw ?? null,
+        revenuePerShare: financials.revenuePerShare?.raw ?? null,
+        returnOnEquity: financials.returnOnEquity?.raw ?? null,
+        profitMargins: financials.profitMargins?.raw ?? null,
+        revenueGrowth: financials.revenueGrowth?.raw ?? null,
+        debtToEquity: financials.debtToEquity?.raw ?? null,
+        currentRatio: financials.currentRatio?.raw ?? null,
+        totalRevenue: financials.totalRevenue?.raw ?? null,
+        recommendationMean: financials.recommendationMean?.raw ?? null,
+        targetMeanPrice: financials.targetMeanPrice?.raw ?? null,
+        numberOfAnalystOpinions: financials.numberOfAnalystOpinions?.raw ?? null,
+        recommendationBuy: (reco.strongBuy ?? 0) + (reco.buy ?? 0),
+        recommendationHold: reco.hold ?? 0,
+        recommendationSell: (reco.sell ?? 0) + (reco.strongSell ?? 0),
+      };
+    });
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/market/options/:symbol
+router.get('/options/:symbol', async (req: Request, res: Response) => {
+  const { symbol } = req.params;
+  const date = req.query.date ? Number(req.query.date) : undefined;
+  try {
+    let url = `https://query1.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}`;
+    if (date) url += `?date=${date}`;
+
+    const r = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        Accept: 'application/json',
+      },
+      timeout: 10000,
+    });
+
+    const result = r.data?.optionChain?.result?.[0];
+    if (!result) {
+      res.status(404).json({ error: 'No options data found' });
+      return;
+    }
+
+    const expDateTs: number = result.options?.[0]?.expirationDate ?? 0;
+
+    function mapContract(raw: any) {
+      return {
+        strike: raw.strike ?? 0,
+        bid: raw.bid ?? 0,
+        ask: raw.ask ?? 0,
+        lastPrice: raw.lastPrice ?? 0,
+        volume: raw.volume ?? null,
+        openInterest: raw.openInterest ?? null,
+        impliedVolatility: raw.impliedVolatility != null
+          ? Number((raw.impliedVolatility * 100).toFixed(2)) : null,
+        inTheMoney: raw.inTheMoney ?? false,
+        expiration: new Date(expDateTs * 1000).toISOString().slice(0, 10),
+        contractSymbol: raw.contractSymbol ?? '',
+      };
+    }
+
+    res.json({
+      symbol: symbol.toUpperCase(),
+      expirationDates: (result.expirationDates ?? []).map(String),
+      calls: (result.options?.[0]?.calls ?? []).map(mapContract),
+      puts: (result.options?.[0]?.puts ?? []).map(mapContract),
+      underlyingPrice: result.quote?.regularMarketPrice ?? 0,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
+

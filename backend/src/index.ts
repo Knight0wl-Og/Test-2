@@ -5,6 +5,7 @@ import { db } from './db/client';
 import quotesRouter from './routes/quotes';
 import watchlistRouter from './routes/watchlist';
 import marketRouter from './routes/market';
+import copilotRouter from './routes/copilot';
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/quotes', quotesRouter);
 app.use('/api/watchlists', watchlistRouter);
 app.use('/api/market', marketRouter);
+app.use('/api/copilot', copilotRouter);
 
 // Global error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

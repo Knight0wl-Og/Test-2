@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search, Bell, Settings, Activity, PanelLeft, X, Wifi,
-  Check, RefreshCw, Download, AlertCircle, RotateCcw,
+  Check, RefreshCw, Download, AlertCircle, RotateCcw, Plus, Trash2,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { useMarketStatus } from '../../hooks/useMarketData';
 import { checkAndDownload, applyUpdate, type UpdateProgress } from '../../services/liveUpdate';
+import { loadAlerts, removeAlert, type PriceAlert } from '../../services/alertsService';
+import { AddAlertModal } from '../common/AddAlertModal';
 import clsx from 'clsx';
 
 interface HeaderProps {
@@ -17,6 +20,11 @@ interface HeaderProps {
 
 function NotificationsDropdown({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const [alerts, setAlerts] = useState<PriceAlert[]>(() => loadAlerts());
+  const [showAddAlert, setShowAddAlert] = useState(false);
+
+  function refresh() { setAlerts(loadAlerts()); }
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -26,23 +34,98 @@ function NotificationsDropdown({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener('mousedown', onClick);
   }, [onClose]);
 
+  const triggered = alerts.filter((a) => a.triggered);
+  const active = alerts.filter((a) => !a.triggered);
+
+  function fmt(n: number) {
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
   return (
-    <div
-      ref={ref}
-      className="absolute right-0 top-full mt-2 w-72 bg-bg-card border border-border-dim rounded-xl shadow-xl z-50 overflow-hidden"
-    >
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border-dim">
-        <span className="text-sm font-semibold text-white">Notifications</span>
-        <button onClick={onClose} className="text-text-muted hover:text-white">
-          <X className="w-4 h-4" />
-        </button>
+    <>
+      <div
+        ref={ref}
+        className="absolute right-0 top-full mt-2 w-80 bg-bg-card border border-border-dim rounded-xl shadow-xl z-50 overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border-dim">
+          <span className="text-sm font-semibold text-white">
+            Alerts
+            {active.length > 0 && (
+              <span className="ml-1.5 text-xs bg-accent/20 text-accent rounded-full px-1.5 py-0.5">{active.length}</span>
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAddAlert(true)}
+              className="text-text-muted hover:text-accent transition-colors"
+              title="Add alert"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => { navigate('/alerts'); onClose(); }}
+              className="text-xs text-accent hover:underline"
+            >
+              View all
+            </button>
+            <button onClick={onClose} className="text-text-muted hover:text-white ml-1">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="max-h-64 overflow-y-auto">
+          {triggered.length > 0 && (
+            <div className="px-3 py-2 border-b border-border-dim/50">
+              <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">Triggered</p>
+              {triggered.slice(0, 3).map((a) => (
+                <div key={a.id} className="flex items-center gap-2 py-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                  <span className="text-xs text-gray-300 flex-1">
+                    <strong>{a.symbol}</strong> hit ${fmt(a.triggeredPrice ?? a.targetPrice)}
+                  </span>
+                  <button onClick={() => { removeAlert(a.id); refresh(); }} className="text-text-muted/40 hover:text-red-400 transition-colors">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {active.length > 0 && (
+            <div className="px-3 py-2">
+              <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">Watching</p>
+              {active.slice(0, 5).map((a) => (
+                <div key={a.id} className="flex items-center gap-2 py-1.5">
+                  <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', a.direction === 'above' ? 'bg-green' : 'bg-red-400')} />
+                  <span className="text-xs text-gray-300 flex-1">
+                    <strong>{a.symbol}</strong> {a.direction} ${fmt(a.targetPrice)}
+                  </span>
+                  <button onClick={() => { removeAlert(a.id); refresh(); }} className="text-text-muted/40 hover:text-red-400 transition-colors">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {alerts.length === 0 && (
+            <div className="px-4 py-6 text-center">
+              <Bell className="w-8 h-8 text-text-muted mx-auto mb-2 opacity-40" />
+              <p className="text-sm text-text-muted">No active alerts</p>
+              <p className="text-xs text-text-muted/60 mt-1">Click + to set a price alert</p>
+            </div>
+          )}
+        </div>
       </div>
-      <div className="px-4 py-6 text-center">
-        <Bell className="w-8 h-8 text-text-muted mx-auto mb-2 opacity-40" />
-        <p className="text-sm text-text-muted">No active alerts</p>
-        <p className="text-xs text-text-muted/60 mt-1">Price alert functionality coming soon</p>
-      </div>
-    </div>
+
+      {showAddAlert && (
+        <AddAlertModal
+          onClose={() => setShowAddAlert(false)}
+          onAdded={refresh}
+        />
+      )}
+    </>
   );
 }
 
@@ -161,9 +244,17 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState(
     localStorage.getItem('TRADEEDGE_API_URL') || 'http://localhost:3001'
   );
+  const [anthropicKey, setAnthropicKey] = useState(
+    localStorage.getItem('TRADEEDGE_ANTHROPIC_KEY') || ''
+  );
 
   function save() {
     localStorage.setItem('TRADEEDGE_API_URL', url.trim());
+    if (anthropicKey.trim()) {
+      localStorage.setItem('TRADEEDGE_ANTHROPIC_KEY', anthropicKey.trim());
+    } else {
+      localStorage.removeItem('TRADEEDGE_ANTHROPIC_KEY');
+    }
     window.location.reload();
   }
 
@@ -200,6 +291,24 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             onChange={(e) => setUrl(e.target.value)}
             placeholder="http://192.168.1.100:3001"
             className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent"
+          />
+        </div>
+
+        {/* Anthropic API Key */}
+        <div className="mb-5">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-xs font-medium text-gray-300">Anthropic API Key</span>
+            <span className="text-[10px] text-text-muted">(AI Copilot)</span>
+          </div>
+          <p className="text-xs text-text-muted mb-2 leading-relaxed">
+            Required for the AI Copilot feature. Stored locally, never sent to our servers.
+          </p>
+          <input
+            type="password"
+            value={anthropicKey}
+            onChange={(e) => setAnthropicKey(e.target.value)}
+            placeholder="sk-ant-…"
+            className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono"
           />
         </div>
 
@@ -248,6 +357,8 @@ export function Header({ onSearch, onToggleWatchlist }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
+  const activeAlerts = loadAlerts().filter((a) => !a.triggered);
+
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (query.trim()) onSearch?.(query.trim().toUpperCase());
@@ -295,9 +406,14 @@ export function Header({ onSearch, onToggleWatchlist }: HeaderProps) {
         <div className="relative">
           <button
             onClick={() => setShowNotifications((v) => !v)}
-            className={clsx('text-text-muted hover:text-gray-200 transition-colors', showNotifications && 'text-gray-200')}
+            className={clsx('text-text-muted hover:text-gray-200 transition-colors relative', showNotifications && 'text-gray-200')}
           >
             <Bell className="w-4 h-4" />
+            {activeAlerts.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-accent rounded-full text-[8px] text-white flex items-center justify-center font-bold leading-none">
+                {activeAlerts.length > 9 ? '9+' : activeAlerts.length}
+              </span>
+            )}
           </button>
           {showNotifications && <NotificationsDropdown onClose={() => setShowNotifications(false)} />}
         </div>

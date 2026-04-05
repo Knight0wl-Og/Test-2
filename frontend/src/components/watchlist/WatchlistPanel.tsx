@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Plus, RefreshCw, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useWatchlistStore } from '../../store/watchlistStore';
@@ -28,6 +28,23 @@ export function WatchlistPanel({ open = false, onClose }: WatchlistPanelProps) {
 
   const COLORS = ['#6366f1', '#8b5cf6', '#22c55e', '#f59e0b', '#ec4899', '#06b6d4', '#f97316'];
 
+  // Swipe-to-close
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
+    // Left swipe (negative dx) with minimal vertical movement
+    if (dx < -60 && dy < 40) onClose?.();
+  }, [onClose]);
+
   function submitAddGroup(e: React.FormEvent) {
     e.preventDefault();
     const name = newGroupName.trim();
@@ -56,6 +73,9 @@ export function WatchlistPanel({ open = false, onClose }: WatchlistPanelProps) {
 
       {/* Panel */}
       <div
+        ref={panelRef}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         className={clsx(
           'flex flex-col bg-bg-secondary border-r border-border-dim transition-transform duration-300 ease-in-out',
           // Mobile: fixed drawer sliding in from left

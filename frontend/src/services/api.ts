@@ -10,6 +10,8 @@ import {
   fetchWatchlistsNative, createWatchlistNative, updateWatchlistNative,
   deleteWatchlistNative, addSymbolToWatchlistNative, removeSymbolFromWatchlistNative,
 } from './nativeWatchlist';
+import { fetchResearchNative, type ResearchData } from './nativeResearch';
+import { fetchOptionsNative, type OptionsChain } from './nativeOptions';
 
 // On Android (Capacitor native), bypass the backend entirely.
 // On Electron/Web, use the backend API as normal.
@@ -84,6 +86,79 @@ export async function fetchEarningsThisWeek(): Promise<string[]> {
   if (isNative()) return fetchEarningsThisWeekNative();
   const { data } = await api.get<string[]>('/api/market/earnings-week');
   return data;
+}
+
+// ---- Research ----
+
+export async function fetchResearch(symbol: string): Promise<ResearchData> {
+  if (isNative()) return fetchResearchNative(symbol);
+  const { data } = await api.get<ResearchData>(`/api/market/research/${symbol}`);
+  return data;
+}
+
+// ---- Options ----
+
+export async function fetchOptions(symbol: string, expirationDate?: number): Promise<OptionsChain> {
+  if (isNative()) return fetchOptionsNative(symbol, expirationDate);
+  const { data } = await api.get<OptionsChain>(`/api/market/options/${symbol}`, {
+    params: expirationDate ? { date: expirationDate } : undefined,
+  });
+  return data;
+}
+
+// ---- AI Copilot ----
+
+interface MarketSnapshot {
+  fearGreed: { value: number; valueText: string };
+  vix: number | null;
+  topGainers: Array<{ symbol: string; changePercent: number }>;
+  topLosers: Array<{ symbol: string; changePercent: number }>;
+  sectors: Array<{ name: string; changePercent: number }>;
+}
+
+export async function fetchCopilotAnalysis(snapshot: MarketSnapshot): Promise<string> {
+  const apiKey = localStorage.getItem('TRADEEDGE_ANTHROPIC_KEY') || '';
+
+  if (isNative()) {
+    // On Android: call Anthropic API directly via CapacitorHttp
+    const { CapacitorHttp } = await import('@capacitor/core');
+    const movers_universe = ['AAPL','MSFT','NVDA','GOOGL','META','AMZN','TSLA','AMD','JPM','GS'];
+    const gainers = snapshot.topGainers.slice(0, 5).map((g) => `${g.symbol} +${g.changePercent.toFixed(2)}%`).join(', ');
+    const losers = snapshot.topLosers.slice(0, 5).map((l) => `${l.symbol} ${l.changePercent.toFixed(2)}%`).join(', ');
+    const sectorSummary = snapshot.sectors.slice(0, 6).map((s) => `${s.name}: ${s.changePercent >= 0 ? '+' : ''}${s.changePercent.toFixed(2)}%`).join(', ');
+
+    const prompt = `You are a concise market analyst. Analyse the following current market data and provide a brief, insightful summary (3-4 paragraphs) covering market sentiment, key movers, sector rotation, and any notable observations. Be direct and avoid generic disclaimers.\n\nMarket Data:\n- Fear & Greed Index: ${snapshot.fearGreed?.value ?? 'N/A'} (${snapshot.fearGreed?.valueText ?? 'N/A'})\n- VIX: ${snapshot.vix?.toFixed(2) ?? 'N/A'}\n- Top Gainers: ${gainers}\n- Top Losers: ${losers}\n- Sector Performance: ${sectorSummary}\n\nWrite a concise market analysis:`;
+
+    const res = await CapacitorHttp.post({
+      url: 'https://api.anthropic.com/v1/messages',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      data: {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: prompt }],
+      },
+    });
+
+    if (res.status === 401) throw new Error('Invalid Anthropic API key. Check your key in Settings.');
+    if (res.status === 429) throw new Error('Anthropic rate limit reached. Try again in a moment.');
+    if (res.status !== 200) throw new Error('Failed to generate analysis.');
+
+    return res.data?.content?.[0]?.text ?? '';
+  }
+
+  // Electron/Web: proxy through backend
+  const { data } = await api.post<{ analysis: string; error?: string }>(
+    '/api/copilot/analyse',
+    snapshot,
+    { headers: apiKey ? { 'x-anthropic-key': apiKey } : {} }
+  );
+
+  if (data.error) throw new Error(data.error);
+  return data.analysis;
 }
 
 // ---- Watchlists ----
