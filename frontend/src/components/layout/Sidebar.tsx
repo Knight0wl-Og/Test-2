@@ -1,4 +1,7 @@
-import { LayoutDashboard, Search, BookOpen, Bot, TrendingUp, Briefcase, Bell, LineChart } from 'lucide-react';
+import {
+  LayoutDashboard, Search, BookOpen, Bot,
+  TrendingUp, Briefcase, Bell, LineChart,
+} from 'lucide-react';
 import clsx from 'clsx';
 
 const NAV_ITEMS = [
@@ -19,21 +22,21 @@ interface SidebarProps {
 
 export function Sidebar({ active = 'dashboard', onNavigate }: SidebarProps) {
   return (
-    <nav className="hidden lg:flex w-14 bg-bg-secondary border-r border-border-dim flex-col items-center py-3 gap-1 shrink-0">
+    <nav className="hidden lg:flex w-10 bg-bg-secondary border-r border-panel flex-col items-center py-2 gap-0.5 shrink-0">
       {NAV_ITEMS.map(({ icon: Icon, label, id }) => (
         <button
           key={id}
           title={label}
           onClick={() => onNavigate?.(id)}
           className={clsx(
-            'w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative group',
+            'w-8 h-8 rounded flex items-center justify-center transition-colors relative group',
             active === id
               ? 'bg-accent/20 text-accent'
               : 'text-text-muted hover:bg-bg-hover hover:text-gray-200'
           )}
         >
-          <Icon className="w-4.5 h-4.5" size={18} />
-          <span className="absolute left-full ml-2 px-2 py-1 bg-bg-card border border-border-dim rounded text-xs text-gray-200 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+          <Icon size={16} />
+          <span className="absolute left-full ml-2 px-2 py-1 bg-bg-card border border-border-dim rounded text-[11px] text-gray-200 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
             {label}
           </span>
         </button>

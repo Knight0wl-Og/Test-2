@@ -9,6 +9,9 @@ export default {
         'bg-card': '#16161f',
         'bg-hover': '#1c1c28',
         'border-dim': '#1f2937',
+        // Pro UI panel borders (slightly lighter, more visible dividers)
+        'border-panel': '#252535',
+        'bg-panel': '#0d0d14',
         'text-muted': '#6b7280',
         'text-dim': '#9ca3af',
         green: {
