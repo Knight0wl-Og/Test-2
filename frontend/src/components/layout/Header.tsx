@@ -169,6 +169,8 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [anthropicKey, setAnthropicKey] = useState(localStorage.getItem('TRADEEDGE_ANTHROPIC_KEY') || '');
   const [finnhubKey, setFinnhubKey] = useState(localStorage.getItem('TRADEEDGE_FINNHUB_KEY') || '');
   const [polygonKey, setPolygonKey] = useState(localStorage.getItem('TRADEEDGE_POLYGON_KEY') || '');
+  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('TRADEEDGE_GEMINI_KEY') || '');
+  const [groqKey, setGroqKey] = useState(localStorage.getItem('TRADEEDGE_GROQ_KEY') || '');
 
   function save() {
     localStorage.setItem('TRADEEDGE_API_URL', url.trim());
@@ -178,6 +180,10 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     else localStorage.removeItem('TRADEEDGE_FINNHUB_KEY');
     if (polygonKey.trim()) localStorage.setItem('TRADEEDGE_POLYGON_KEY', polygonKey.trim());
     else localStorage.removeItem('TRADEEDGE_POLYGON_KEY');
+    if (geminiKey.trim()) localStorage.setItem('TRADEEDGE_GEMINI_KEY', geminiKey.trim());
+    else localStorage.removeItem('TRADEEDGE_GEMINI_KEY');
+    if (groqKey.trim()) localStorage.setItem('TRADEEDGE_GROQ_KEY', groqKey.trim());
+    else localStorage.removeItem('TRADEEDGE_GROQ_KEY');
     window.location.reload();
   }
 
@@ -198,8 +204,33 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.100:3001" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent" />
         </div>
 
+        {/* AI Provider section */}
+        <div className="mb-1">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">AI Copilot — add one or more</p>
+        </div>
+
+        <div className="mb-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-xs font-medium text-gray-300">Gemini API Key</span>
+            <span className="text-[10px] text-green-400 bg-green-400/10 px-1.5 rounded">FREE</span>
+            <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-[10px] text-accent hover:underline ml-auto">aistudio.google.com</a>
+          </div>
+          <input type="password" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} placeholder="AIza…" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
+          <p className="text-[10px] text-text-muted mt-1">1,500 req/day free · Gemini 2.0 Flash · Best quality</p>
+        </div>
+
+        <div className="mb-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-xs font-medium text-gray-300">Groq API Key</span>
+            <span className="text-[10px] text-green-400 bg-green-400/10 px-1.5 rounded">FREE</span>
+            <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-[10px] text-accent hover:underline ml-auto">console.groq.com</a>
+          </div>
+          <input type="password" value={groqKey} onChange={(e) => setGroqKey(e.target.value)} placeholder="gsk_…" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
+          <p className="text-[10px] text-text-muted mt-1">14,400 req/day free · Llama 3.3 70B · Fastest</p>
+        </div>
+
         <div className="mb-4">
-          <div className="flex items-center gap-1.5 mb-1.5"><span className="text-xs font-medium text-gray-300">Anthropic API Key</span><span className="text-[10px] text-text-muted">(AI Copilot)</span></div>
+          <div className="flex items-center gap-1.5 mb-1.5"><span className="text-xs font-medium text-gray-300">Anthropic API Key</span><span className="text-[10px] text-text-muted">(Claude — paid)</span></div>
           <input type="password" value={anthropicKey} onChange={(e) => setAnthropicKey(e.target.value)} placeholder="sk-ant-…" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
         </div>
 
