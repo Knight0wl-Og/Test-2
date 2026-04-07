@@ -1,0 +1,21 @@
+{
+	"appId": "com.tradeedge.app",
+	"appName": "TradeEdge",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	},
+	"android": {},
+	"plugins": {
+		"LiveUpdate": {
+			"autoDeleteBundles": true
+		},
+		"App": {},
+		"SplashScreen": {
+			"launchShowDuration": 2000,
+			"backgroundColor": "#0a0a0f",
+			"showSpinner": true,
+			"spinnerColor": "#6366f1"
+		}
+	}
+}

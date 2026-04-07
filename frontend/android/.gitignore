@@ -1,0 +1,10 @@
+# Gradle build outputs
+.gradle/
+build/
+app/build/
+
+# Local properties (contains SDK path)
+local.properties
+
+# Web assets (synced by 'cap sync' from frontend/dist)
+app/src/main/assets/public/
