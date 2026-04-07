@@ -2,47 +2,34 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import { Search } from 'lucide-react';
 import { useWatchlistStore } from '../../store/watchlistStore';
-import { TVChartWidget, toTVInterval, type TVInterval } from './TVChartWidget';
-
-type Timeframe = '5m' | '15m' | '30m' | '1h' | '4h' | '1d' | '1w';
-
-const TIMEFRAMES: { label: string; tf: Timeframe; tv: TVInterval }[] = [
-  { label: '5M',  tf: '5m',  tv: '5'   },
-  { label: '15M', tf: '15m', tv: '15'  },
-  { label: '30M', tf: '30m', tv: '30'  },
-  { label: '1H',  tf: '1h',  tv: '60'  },
-  { label: '4H',  tf: '4h',  tv: '240' },
-  { label: '1D',  tf: '1d',  tv: 'D'   },
-  { label: '1W',  tf: '1w',  tv: 'W'   },
-];
+import { useQuote } from '../../hooks/useQuotes';
+import { ProChart } from './ProChart';
+import { OptionsPanel } from './OptionsPanel';
 
 interface ChartPaneProps {
-  /** Initial symbol for this pane */
   defaultSymbol?: string;
-  /** Whether to show the pane header (symbol + timeframe strip) */
   showHeader?: boolean;
+  showOptions?: boolean;
   className?: string;
 }
 
-export function ChartPane({ defaultSymbol, showHeader = true, className }: ChartPaneProps) {
+export function ChartPane({ defaultSymbol, showHeader = true, showOptions = true, className }: ChartPaneProps) {
   const globalSymbol = useWatchlistStore((s) => s.selectedSymbol);
   const selectSymbol = useWatchlistStore((s) => s.selectSymbol);
 
   const [localSymbol, setLocalSymbol] = useState<string | null>(null);
-  const [timeframe, setTimeframe] = useState<Timeframe>('1d');
   const [editingSymbol, setEditingSymbol] = useState(false);
   const [symbolInput, setSymbolInput] = useState('');
 
-  // Pane uses its own symbol if set, otherwise falls back to the global selection
   const activeSymbol = localSymbol ?? defaultSymbol ?? globalSymbol ?? 'AAPL';
-  const activeTVInterval = TIMEFRAMES.find((t) => t.tf === timeframe)?.tv ?? 'D';
+  const { data: quote } = useQuote(activeSymbol);
 
   function handleSymbolSubmit(e: React.FormEvent) {
     e.preventDefault();
     const s = symbolInput.trim().toUpperCase();
     if (s) {
       setLocalSymbol(s);
-      selectSymbol(s); // also update global so other parts of the app know
+      selectSymbol(s);
       setEditingSymbol(false);
       setSymbolInput('');
     }
@@ -51,8 +38,7 @@ export function ChartPane({ defaultSymbol, showHeader = true, className }: Chart
   return (
     <div className={clsx('flex flex-col min-h-0 bg-bg-primary', className)}>
       {showHeader && (
-        <div className="flex items-center gap-1 px-2 h-8 border-b border-panel bg-bg-secondary shrink-0 overflow-x-auto no-scrollbar">
-          {/* Symbol button */}
+        <div className="flex items-center gap-1 px-2 h-7 border-b border-panel bg-bg-secondary shrink-0 overflow-x-auto no-scrollbar">
           {editingSymbol ? (
             <form onSubmit={handleSymbolSubmit} className="shrink-0">
               <input
@@ -68,42 +54,27 @@ export function ChartPane({ defaultSymbol, showHeader = true, className }: Chart
           ) : (
             <button
               onClick={() => setEditingSymbol(true)}
-              className="flex items-center gap-1 text-xs font-semibold text-white hover:text-accent transition-colors shrink-0 group"
-              title="Change symbol"
+              className="flex items-center gap-1 text-[11px] font-semibold text-white hover:text-accent transition-colors shrink-0 group"
             >
               {activeSymbol}
+              {quote && (
+                <span className="text-[10px] font-mono text-text-muted group-hover:text-accent/70">
+                  · {quote.price.toFixed(2)}
+                </span>
+              )}
               <Search className="w-3 h-3 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
           )}
-
-          <div className="w-px h-4 bg-border-panel mx-1 shrink-0" />
-
-          {/* Timeframe pills */}
-          {TIMEFRAMES.map(({ label, tf }) => (
-            <button
-              key={tf}
-              onClick={() => setTimeframe(tf)}
-              className={clsx(
-                'px-2 py-0.5 rounded text-[11px] transition-colors shrink-0',
-                timeframe === tf
-                  ? 'bg-accent text-white'
-                  : 'text-text-muted hover:text-gray-200 hover:bg-bg-hover'
-              )}
-            >
-              {label}
-            </button>
-          ))}
         </div>
       )}
 
       {/* Chart fills remaining space */}
-      <div className="flex-1 min-h-0">
-        <TVChartWidget
-          symbol={activeSymbol}
-          interval={activeTVInterval}
-          onSymbolChange={(s) => { setLocalSymbol(s); selectSymbol(s); }}
-        />
-      </div>
+      <ProChart symbol={activeSymbol} className="flex-1 min-h-0" />
+
+      {/* Options chain panel */}
+      {showOptions && (
+        <OptionsPanel symbol={activeSymbol} underlyingPrice={quote?.price} />
+      )}
     </div>
   );
 }
