@@ -12,10 +12,16 @@ import {
 } from './nativeWatchlist';
 import { fetchResearchNative, type ResearchData } from './nativeResearch';
 import { fetchOptionsNative, type OptionsChain } from './nativeOptions';
+import {
+  isSchwabConnected,
+  fetchSchwabQuote, fetchSchwabBatchQuotes,
+  fetchSchwabHistory, fetchSchwabOptions,
+} from './schwabService';
 
 // On Android (Capacitor native), bypass the backend entirely.
 // On Electron/Web, use the backend API as normal.
 const isNative = () => Capacitor.isNativePlatform();
+const useSchwab = () => isSchwabConnected();
 
 function getBaseUrl(): string {
   if (typeof window !== 'undefined') {
@@ -30,6 +36,7 @@ const api = axios.create({ baseURL: getBaseUrl(), timeout: 15000 });
 // ---- Quotes ----
 
 export async function fetchQuote(symbol: string): Promise<Quote> {
+  if (useSchwab()) return fetchSchwabQuote(symbol);
   if (isNative()) return fetchQuoteNative(symbol);
   const { data } = await api.get<Quote>(`/api/quotes/${symbol}`);
   return data;
@@ -37,6 +44,7 @@ export async function fetchQuote(symbol: string): Promise<Quote> {
 
 export async function fetchBatchQuotes(symbols: string[]): Promise<Quote[]> {
   if (!symbols.length) return [];
+  if (useSchwab()) return fetchSchwabBatchQuotes(symbols);
   if (isNative()) return fetchBatchQuotesNative(symbols);
   const { data } = await api.get<Quote[]>('/api/quotes/batch', {
     params: { symbols: symbols.join(',') },
@@ -49,6 +57,7 @@ export async function fetchHistory(
   period = '3mo',
   interval = '1d'
 ): Promise<OHLCVBar[]> {
+  if (useSchwab()) return fetchSchwabHistory(symbol, period, interval);
   if (isNative()) return fetchHistoryNative(symbol, period, interval);
   const { data } = await api.get<OHLCVBar[]>(`/api/quotes/${symbol}/history`, {
     params: { period, interval },
@@ -99,6 +108,7 @@ export async function fetchResearch(symbol: string): Promise<ResearchData> {
 // ---- Options ----
 
 export async function fetchOptions(symbol: string, expirationDate?: number): Promise<OptionsChain> {
+  if (useSchwab()) return fetchSchwabOptions(symbol, expirationDate);
   if (isNative()) return fetchOptionsNative(symbol, expirationDate);
   const { data } = await api.get<OptionsChain>(`/api/market/options/${symbol}`, {
     params: expirationDate ? { date: expirationDate } : undefined,

@@ -30,3 +30,31 @@ createRoot(document.getElementById('root')!).render(
 
 // Sync earnings calendar into the watchlist 2s after mount (non-blocking)
 setTimeout(syncEarningsWatchlist, 2000);
+
+// Handle Schwab OAuth redirect: tradeedge://oauth/callback?code=...
+if (Capacitor.isNativePlatform()) {
+  (async () => {
+    try {
+      const { App: CapApp } = await import('@capacitor/app');
+      const { Browser } = await import('@capacitor/browser');
+      const { exchangeSchwabCode } = await import('./services/schwabService');
+
+      CapApp.addListener('appUrlOpen', async (event) => {
+        if (!event.url.startsWith('tradeedge://oauth/callback')) return;
+        const url = new URL(event.url);
+        const code = url.searchParams.get('code');
+        if (!code) return;
+        try {
+          await Browser.close();
+          await exchangeSchwabCode(code);
+          // Reload so Schwab routing kicks in immediately
+          window.location.reload();
+        } catch (e) {
+          console.error('Schwab token exchange failed:', e);
+        }
+      });
+    } catch {
+      // @capacitor/app not available
+    }
+  })();
+}

@@ -21,6 +21,9 @@ const config: CapacitorConfig = {
     LiveUpdate: {
       autoDeleteBundles: true,
     },
+    // Schwab OAuth deep-link: tradeedge://oauth/callback
+    // AndroidManifest.xml also needs intent-filter for this scheme (added to android/ folder)
+    App: {},
     SplashScreen: {
       launchShowDuration: 2000,
       backgroundColor: '#0a0a0f',

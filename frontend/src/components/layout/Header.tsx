@@ -171,6 +171,10 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [polygonKey, setPolygonKey] = useState(localStorage.getItem('TRADEEDGE_POLYGON_KEY') || '');
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('TRADEEDGE_GEMINI_KEY') || '');
   const [groqKey, setGroqKey] = useState(localStorage.getItem('TRADEEDGE_GROQ_KEY') || '');
+  const [schwabClientId, setSchwabClientId] = useState(localStorage.getItem('TRADEEDGE_SCHWAB_CLIENT_ID') || '');
+  const [schwabClientSecret, setSchwabClientSecret] = useState(localStorage.getItem('TRADEEDGE_SCHWAB_CLIENT_SECRET') || '');
+  const [schwabConnected, setSchwabConnected] = useState(!!localStorage.getItem('SCHWAB_ACCESS_TOKEN'));
+  const [schwabConnecting, setSchwabConnecting] = useState(false);
 
   function save() {
     localStorage.setItem('TRADEEDGE_API_URL', url.trim());
@@ -184,7 +188,34 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     else localStorage.removeItem('TRADEEDGE_GEMINI_KEY');
     if (groqKey.trim()) localStorage.setItem('TRADEEDGE_GROQ_KEY', groqKey.trim());
     else localStorage.removeItem('TRADEEDGE_GROQ_KEY');
+    if (schwabClientId.trim()) localStorage.setItem('TRADEEDGE_SCHWAB_CLIENT_ID', schwabClientId.trim());
+    else localStorage.removeItem('TRADEEDGE_SCHWAB_CLIENT_ID');
+    if (schwabClientSecret.trim()) localStorage.setItem('TRADEEDGE_SCHWAB_CLIENT_SECRET', schwabClientSecret.trim());
+    else localStorage.removeItem('TRADEEDGE_SCHWAB_CLIENT_SECRET');
     window.location.reload();
+  }
+
+  async function connectSchwab() {
+    if (!schwabClientId.trim() || !schwabClientSecret.trim()) {
+      alert('Enter your Schwab Client ID and Client Secret first, then tap Save & Reload before connecting.');
+      return;
+    }
+    setSchwabConnecting(true);
+    try {
+      const { startSchwabOAuth } = await import('../../services/schwabService');
+      await startSchwabOAuth();
+    } catch (e: unknown) {
+      alert((e as Error).message);
+    } finally {
+      setSchwabConnecting(false);
+    }
+  }
+
+  function disconnectSchwab() {
+    localStorage.removeItem('SCHWAB_ACCESS_TOKEN');
+    localStorage.removeItem('SCHWAB_REFRESH_TOKEN');
+    localStorage.removeItem('SCHWAB_TOKEN_EXPIRY');
+    setSchwabConnected(false);
   }
 
   return (
@@ -232,6 +263,43 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="mb-4">
           <div className="flex items-center gap-1.5 mb-1.5"><span className="text-xs font-medium text-gray-300">Anthropic API Key</span><span className="text-[10px] text-text-muted">(Claude — paid)</span></div>
           <input type="password" value={anthropicKey} onChange={(e) => setAnthropicKey(e.target.value)} placeholder="sk-ant-…" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
+        </div>
+
+        {/* Schwab */}
+        <div className="mb-1 mt-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Schwab — Real-Time Data</p>
+        </div>
+        <div className="mb-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-xs font-medium text-gray-300">Schwab Client ID</span>
+            {schwabConnected && <span className="text-[10px] text-green-400 bg-green-400/10 px-1.5 rounded ml-auto">Connected ✓</span>}
+          </div>
+          <input type="password" value={schwabClientId} onChange={(e) => setSchwabClientId(e.target.value)} placeholder="Your Schwab app Client ID" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
+        </div>
+        <div className="mb-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-xs font-medium text-gray-300">Schwab Client Secret</span>
+          </div>
+          <input type="password" value={schwabClientSecret} onChange={(e) => setSchwabClientSecret(e.target.value)} placeholder="Your Schwab app Client Secret" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
+          <p className="text-[10px] text-text-muted mt-1">Get from developer.schwab.com → My Apps (pending approval)</p>
+        </div>
+        {schwabClientId && schwabClientSecret && (
+          <div className="mb-4">
+            {schwabConnected ? (
+              <button onClick={disconnectSchwab} className="w-full text-xs text-red-400 hover:text-red-300 border border-red-900/40 rounded py-1.5 transition-colors">
+                Disconnect Schwab Account
+              </button>
+            ) : (
+              <button onClick={connectSchwab} disabled={schwabConnecting} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded py-2 text-sm font-medium transition-colors">
+                {schwabConnecting ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Connecting…</> : '🔗 Connect Schwab Account'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Market data keys */}
+        <div className="mb-1 mt-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Market Data — Free Keys</p>
         </div>
 
         <div className="mb-4">
