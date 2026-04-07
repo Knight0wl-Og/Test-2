@@ -115,13 +115,22 @@ jobs:
       - name: Create web bundle for OTA updates
         run: cd frontend/dist && zip -r ../../bundle.zip .
 
-      - name: Add Android platform
+      - name: Add Android platform (if missing)
         working-directory: frontend
-        run: npx cap add android 2>/dev/null || true
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          else
+            echo "android/ already present, skipping cap add"
+          fi
 
       - name: Sync Capacitor
         working-directory: frontend
         run: npx cap sync android
+
+      - name: Write local.properties
+        working-directory: frontend/android
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
       - name: Make gradlew executable
         working-directory: frontend/android
@@ -129,7 +138,7 @@ jobs:
 
       - name: Build debug APK
         working-directory: frontend/android
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Rename APK
         run: cp frontend/android/app/build/outputs/apk/debug/app-debug.apk TradeEdge.apk
