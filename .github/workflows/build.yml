@@ -86,7 +86,6 @@ jobs:
 
   build-android:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -130,7 +129,10 @@ jobs:
 
       - name: Write local.properties
         working-directory: frontend/android
-        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+        run: |
+          SDK_PATH="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "sdk.dir=$SDK_PATH" > local.properties
+          echo "Android SDK path: $SDK_PATH"
 
       - name: Make gradlew executable
         working-directory: frontend/android
@@ -164,6 +166,7 @@ jobs:
         with:
           name: windows-installer
           path: dist/
+        continue-on-error: true
 
       - name: Download Android artifacts
         uses: actions/download-artifact@v4
