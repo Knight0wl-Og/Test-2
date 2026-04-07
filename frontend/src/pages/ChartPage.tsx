@@ -6,6 +6,8 @@ import { useWatchlistStore } from '../store/watchlistStore';
 import { useQuote } from '../hooks/useQuotes';
 import { ProChart } from '../components/chart/ProChart';
 import { OptionsPanel } from '../components/chart/OptionsPanel';
+import { AnalystPanel } from '../components/chart/AnalystPanel';
+import { InstitutionalPanel } from '../components/chart/InstitutionalPanel';
 
 function fmt(n: number | null | undefined, d = 2) {
   if (n == null) return '—';
@@ -48,6 +50,8 @@ export function ChartPage() {
 
       {/* Options panel at bottom */}
       <OptionsPanel symbol={symbol} underlyingPrice={quote?.price} />
+      <AnalystPanel symbol={symbol} />
+      <InstitutionalPanel symbol={symbol} />
     </div>
   );
 }

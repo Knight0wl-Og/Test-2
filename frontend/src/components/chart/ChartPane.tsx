@@ -5,6 +5,8 @@ import { useWatchlistStore } from '../../store/watchlistStore';
 import { useQuote } from '../../hooks/useQuotes';
 import { ProChart } from './ProChart';
 import { OptionsPanel } from './OptionsPanel';
+import { AnalystPanel } from './AnalystPanel';
+import { InstitutionalPanel } from './InstitutionalPanel';
 
 interface ChartPaneProps {
   defaultSymbol?: string;
@@ -75,6 +77,12 @@ export function ChartPane({ defaultSymbol, showHeader = true, showOptions = true
       {showOptions && (
         <OptionsPanel symbol={activeSymbol} underlyingPrice={quote?.price} />
       )}
+
+      {/* Analyst ratings + earnings panel */}
+      {showOptions && <AnalystPanel symbol={activeSymbol} />}
+
+      {/* Institutional holdings panel */}
+      {showOptions && <InstitutionalPanel symbol={activeSymbol} />}
     </div>
   );
 }

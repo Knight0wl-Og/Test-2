@@ -10,6 +10,7 @@ import clsx from 'clsx';
 import type { OHLCVBar } from '../../types';
 import { useHistory } from '../../hooks/useHistory';
 import { useQuote } from '../../hooks/useQuotes';
+import { useEarnings } from '../../hooks/useEarnings';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -463,6 +464,45 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
     chart.subscribeCrosshairMove(handler);
     return () => chart.unsubscribeCrosshairMove(handler);
   }, [bars, cfg.isIntraday]);
+
+  // ── Earnings markers (Finnhub, optional) ─────────────────────────────────
+  const { data: earningsDates } = useEarnings(symbol);
+
+  useEffect(() => {
+    const main = mainSeriesRef.current;
+    if (!main || !bars.length) return;
+
+    if (!earningsDates?.length) {
+      (main as ISeriesApi<'Candlestick'>).setMarkers([]);
+      return;
+    }
+
+    // Map earnings dates to unix timestamps for matching with bars
+    const earningsSet = new Set(earningsDates.map((e) => e.date));
+    const today = new Date().toISOString().slice(0, 10);
+
+    const markers = bars
+      .filter((b) => {
+        const day = new Date(b.time * 1000).toISOString().slice(0, 10);
+        return earningsSet.has(day);
+      })
+      .map((b) => {
+        const day = new Date(b.time * 1000).toISOString().slice(0, 10);
+        const ed = earningsDates.find((e) => e.date === day)!;
+        const upcoming = day >= today;
+        const pos = ed.surprise != null && ed.surprise >= 0;
+        return {
+          time: b.time as unknown as import('lightweight-charts').Time,
+          position: 'belowBar' as const,
+          color: upcoming ? '#f59e0b' : pos ? '#22c55e' : '#ef4444',
+          shape: 'arrowUp' as const,
+          text: upcoming ? 'E' : ed.surprise != null ? `E ${pos ? '+' : ''}${ed.surprise.toFixed(1)}%` : 'E',
+          size: 1,
+        };
+      });
+
+    (main as ISeriesApi<'Candlestick'>).setMarkers(markers);
+  }, [earningsDates, bars]);
 
   // ─── Render ────────────────────────────────────────────────────────────────
 

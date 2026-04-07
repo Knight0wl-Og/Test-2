@@ -167,11 +167,17 @@ function UpdateSection() {
 function SettingsModal({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState(localStorage.getItem('TRADEEDGE_API_URL') || 'http://localhost:3001');
   const [anthropicKey, setAnthropicKey] = useState(localStorage.getItem('TRADEEDGE_ANTHROPIC_KEY') || '');
+  const [finnhubKey, setFinnhubKey] = useState(localStorage.getItem('TRADEEDGE_FINNHUB_KEY') || '');
+  const [polygonKey, setPolygonKey] = useState(localStorage.getItem('TRADEEDGE_POLYGON_KEY') || '');
 
   function save() {
     localStorage.setItem('TRADEEDGE_API_URL', url.trim());
     if (anthropicKey.trim()) localStorage.setItem('TRADEEDGE_ANTHROPIC_KEY', anthropicKey.trim());
     else localStorage.removeItem('TRADEEDGE_ANTHROPIC_KEY');
+    if (finnhubKey.trim()) localStorage.setItem('TRADEEDGE_FINNHUB_KEY', finnhubKey.trim());
+    else localStorage.removeItem('TRADEEDGE_FINNHUB_KEY');
+    if (polygonKey.trim()) localStorage.setItem('TRADEEDGE_POLYGON_KEY', polygonKey.trim());
+    else localStorage.removeItem('TRADEEDGE_POLYGON_KEY');
     window.location.reload();
   }
 
@@ -195,6 +201,24 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="mb-4">
           <div className="flex items-center gap-1.5 mb-1.5"><span className="text-xs font-medium text-gray-300">Anthropic API Key</span><span className="text-[10px] text-text-muted">(AI Copilot)</span></div>
           <input type="password" value={anthropicKey} onChange={(e) => setAnthropicKey(e.target.value)} placeholder="sk-ant-…" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
+        </div>
+
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-xs font-medium text-gray-300">Finnhub API Key</span>
+            <span className="text-[10px] text-text-muted">(earnings, analyst ratings)</span>
+            <a href="https://finnhub.io" target="_blank" rel="noopener noreferrer" className="text-[10px] text-accent hover:underline ml-auto">free at finnhub.io</a>
+          </div>
+          <input type="password" value={finnhubKey} onChange={(e) => setFinnhubKey(e.target.value)} placeholder="d_xxxxxxxxxxxxxxxx" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
+        </div>
+
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-xs font-medium text-gray-300">Polygon.io API Key</span>
+            <span className="text-[10px] text-text-muted">(options Greeks, flow)</span>
+            <a href="https://polygon.io" target="_blank" rel="noopener noreferrer" className="text-[10px] text-accent hover:underline ml-auto">free at polygon.io</a>
+          </div>
+          <input type="password" value={polygonKey} onChange={(e) => setPolygonKey(e.target.value)} placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
         </div>
 
         <div className="flex gap-2 mb-2">
