@@ -40,9 +40,10 @@ interface OHLCTooltip {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const TIMEFRAME_CONFIG: Record<Timeframe, { period: string; interval: string; isIntraday: boolean }> = {
-  '5m':  { period: '3mo',  interval: '5m',  isIntraday: true  },
-  '15m': { period: '3mo',  interval: '15m', isIntraday: true  },
-  '30m': { period: '3mo',  interval: '30m', isIntraday: true  },
+  // Yahoo Finance caps intraday data at 60 days — do not exceed that
+  '5m':  { period: '60d',  interval: '5m',  isIntraday: true  },
+  '15m': { period: '60d',  interval: '15m', isIntraday: true  },
+  '30m': { period: '60d',  interval: '30m', isIntraday: true  },
   '1h':  { period: '2y',   interval: '60m', isIntraday: true  },
   '4h':  { period: '2y',   interval: '60m', isIntraday: false },
   '1d':  { period: '5y',   interval: '1d',  isIntraday: false },
@@ -179,6 +180,53 @@ function fmtVol(n: number) {
   return String(n);
 }
 
+// ─── Candle Countdown Timer ───────────────────────────────────────────────────
+
+const TF_SECONDS: Partial<Record<Timeframe, number>> = {
+  '5m': 300, '15m': 900, '30m': 1800, '1h': 3600, '4h': 14400,
+};
+
+function fmtCountdown(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function useCandleTimer(timeframe: Timeframe): string {
+  const [label, setLabel] = useState('');
+
+  useEffect(() => {
+    const tfSecs = TF_SECONDS[timeframe];
+
+    function tick() {
+      if (tfSecs) {
+        // Intraday: snap to Unix-second cycle
+        const nowSecs = Math.floor(Date.now() / 1000);
+        const secsLeft = tfSecs - (nowSecs % tfSecs);
+        setLabel(fmtCountdown(secsLeft === tfSecs ? tfSecs : secsLeft));
+      } else if (timeframe === '1d') {
+        // Time until NYSE close (4 PM ET). Rough DST: EDT months 3–11, EST otherwise.
+        const now = new Date();
+        const month = now.getUTCMonth() + 1;
+        const closeUTC = (month >= 3 && month <= 11) ? 20 : 21; // 4 PM ET in UTC
+        const nowUTCSecs = now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds();
+        const diff = closeUTC * 3600 - nowUTCSecs;
+        setLabel(diff > 0 && diff <= 8 * 3600 ? fmtCountdown(diff) : '--');
+      } else {
+        setLabel('');
+      }
+    }
+
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [timeframe]);
+
+  return label;
+}
+
 function Tooltip({ tip, visible }: { tip: OHLCTooltip | null; visible: boolean }) {
   if (!visible || !tip) return null;
   const pos = tip.change >= 0;
@@ -242,6 +290,7 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
   const cfg = TIMEFRAME_CONFIG[timeframe];
   const { data: rawBars = [], isLoading } = useHistory(symbol, cfg.period, cfg.interval);
   const { data: quote } = useQuote(symbol);
+  const candleTimer = useCandleTimer(timeframe);
 
   // Aggregate 4H from 1H raw data
   const bars: OHLCVBar[] = timeframe === '4h' ? aggregate4h(rawBars) : rawBars;
@@ -558,6 +607,15 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
             {TF_LABELS[tf]}
           </button>
         ))}
+
+        {candleTimer && (
+          <>
+            <div className="w-px h-4 bg-panel shrink-0" />
+            <span className="text-[10px] font-mono text-amber-400 shrink-0 tabular-nums" title="Time until next candle">
+              {candleTimer}
+            </span>
+          </>
+        )}
 
         <div className="w-px h-4 bg-panel shrink-0" />
 

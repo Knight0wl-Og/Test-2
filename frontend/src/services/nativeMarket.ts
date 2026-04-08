@@ -85,8 +85,8 @@ function periodToTimestamp(period: string): string {
   const now = Date.now();
   const day = 86_400_000;
   const map: Record<string, number> = {
-    '1d': day, '5d': 5 * day, '1mo': 30 * day, '3mo': 90 * day,
-    '6mo': 180 * day, '1y': 365 * day, '2y': 730 * day, '5y': 1825 * day,
+    '1d': day, '5d': 5 * day, '1mo': 30 * day, '60d': 60 * day,
+    '3mo': 90 * day, '6mo': 180 * day, '1y': 365 * day, '2y': 730 * day, '5y': 1825 * day,
   };
   if (period === 'ytd') {
     return String(Math.floor(new Date(new Date().getFullYear(), 0, 1).getTime() / 1000));
