@@ -61,7 +61,7 @@ export async function checkAndDownload(
 
     const release = res.data;
     const asset = (
-      release.assets as Array<{ name: string; browser_download_url: string; updated_at: string }>
+      release.assets as Array<{ id: number; name: string; browser_download_url: string; updated_at: string }>
     ).find((a) => a.name === 'bundle.zip');
 
     if (!asset) {
@@ -77,6 +77,29 @@ export async function checkAndDownload(
       return;
     }
 
+    // Resolve download URL — for private repos, browser_download_url requires auth which
+    // LiveUpdate.downloadBundle doesn't support. Use the GitHub asset API with
+    // disableRedirects to capture the pre-signed CDN URL (no auth required).
+    let downloadUrl = asset.browser_download_url;
+    if (ghToken) {
+      try {
+        const redirect = await CapacitorHttp.get({
+          url: `https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${asset.id}`,
+          headers: {
+            Accept: 'application/octet-stream',
+            Authorization: `Bearer ${ghToken}`,
+          },
+          disableRedirects: true,
+        });
+        const location = redirect.headers?.['location'] ?? redirect.headers?.['Location'];
+        if ((redirect.status === 302 || redirect.status === 301) && location) {
+          downloadUrl = location;
+        }
+      } catch {
+        // Fall back to browser_download_url
+      }
+    }
+
     // Animate progress while the real download runs in the background
     onUpdate({ state: 'downloading', progress: 0 });
     let sim = 0;
@@ -86,7 +109,7 @@ export async function checkAndDownload(
     }, 350);
 
     try {
-      await LiveUpdate.downloadBundle({ bundleId: bundleVersion, url: asset.browser_download_url });
+      await LiveUpdate.downloadBundle({ bundleId: bundleVersion, url: downloadUrl });
       clearInterval(ticker);
       await LiveUpdate.setNextBundle({ bundleId: bundleVersion });
       onUpdate({ state: 'ready', progress: 100 });
