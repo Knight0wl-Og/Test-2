@@ -16,7 +16,7 @@ const SCHWAB_AUTH_URL = 'https://api.schwabapi.com/v1/oauth/authorize';
 const SCHWAB_TOKEN_URL = 'https://api.schwabapi.com/v1/oauth/token';
 const SCHWAB_API_BASE = 'https://api.schwabapi.com/marketdata/v1';
 const SCHWAB_TRADER_BASE = 'https://api.schwabapi.com/trader/v1';
-const REDIRECT_URI = 'tradeedge://oauth/callback';
+const REDIRECT_URI = 'https://knight0wl-og.github.io/Test-2/oauth-callback.html';
 
 const LS_ACCESS_TOKEN = 'SCHWAB_ACCESS_TOKEN';
 const LS_REFRESH_TOKEN = 'SCHWAB_REFRESH_TOKEN';
