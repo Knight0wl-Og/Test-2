@@ -200,9 +200,12 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 
   async function connectSchwab() {
     if (!schwabClientId.trim() || !schwabClientSecret.trim()) {
-      alert('Enter your Schwab Client ID and Client Secret first, then tap Save & Reload before connecting.');
+      alert('Enter your Schwab Client ID and Client Secret first.');
       return;
     }
+    // Save credentials to localStorage immediately so startSchwabOAuth can read them
+    localStorage.setItem('TRADEEDGE_SCHWAB_CLIENT_ID', schwabClientId.trim());
+    localStorage.setItem('TRADEEDGE_SCHWAB_CLIENT_SECRET', schwabClientSecret.trim());
     setSchwabConnecting(true);
     try {
       const { startSchwabOAuth } = await import('../../services/schwabService');
