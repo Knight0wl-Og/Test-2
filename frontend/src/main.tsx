@@ -43,6 +43,12 @@ if (Capacitor.isNativePlatform()) {
         if (!event.url.startsWith('tradeedge://oauth/callback')) return;
         const url = new URL(event.url);
         const code = url.searchParams.get('code');
+        const error = url.searchParams.get('error');
+        if (error) {
+          try { await Browser.close(); } catch { /* ignore */ }
+          alert(`Schwab login failed: ${error}. Please try again.`);
+          return;
+        }
         if (!code) return;
         try {
           await Browser.close();
@@ -51,6 +57,7 @@ if (Capacitor.isNativePlatform()) {
           window.location.reload();
         } catch (e) {
           console.error('Schwab token exchange failed:', e);
+          alert(`Failed to connect Schwab: ${e instanceof Error ? e.message : 'Unknown error'}. Check your Client ID and Secret in Settings.`);
         }
       });
     } catch {

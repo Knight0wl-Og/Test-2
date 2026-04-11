@@ -93,6 +93,36 @@ export async function startSchwabOAuth() {
   }
 }
 
+/** POST to Schwab token endpoint — uses CapacitorHttp on native to avoid CORS */
+async function schwabTokenPost(body: URLSearchParams, credentials: string): Promise<Record<string, unknown>> {
+  if (Capacitor.isNativePlatform()) {
+    const { CapacitorHttp } = await import('@capacitor/core');
+    const res = await CapacitorHttp.post({
+      url: SCHWAB_TOKEN_URL,
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      data: body.toString(),
+    });
+    if (res.status < 200 || res.status >= 300) {
+      throw new Error(`Token request failed (${res.status})`);
+    }
+    return res.data as Record<string, unknown>;
+  }
+
+  const res = await fetch(SCHWAB_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: body.toString(),
+  });
+  if (!res.ok) throw new Error(`Token request failed (${res.status})`);
+  return res.json();
+}
+
 /** Exchange authorization code for access + refresh tokens */
 export async function exchangeSchwabCode(code: string): Promise<void> {
   const clientId = getSchwabClientId();
@@ -106,22 +136,11 @@ export async function exchangeSchwabCode(code: string): Promise<void> {
     redirect_uri: REDIRECT_URI,
   });
 
-  const res = await fetch(SCHWAB_TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
-  });
-
-  if (!res.ok) throw new Error(`Token exchange failed (${res.status})`);
-  const data = await res.json();
-
+  const data = await schwabTokenPost(body, credentials);
   saveSchwabTokens({
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token,
-    expiresAt: Date.now() + (data.expires_in ?? 1800) * 1000,
+    accessToken: data.access_token as string,
+    refreshToken: data.refresh_token as string,
+    expiresAt: Date.now() + ((data.expires_in as number) ?? 1800) * 1000,
   });
 }
 
@@ -139,28 +158,21 @@ export async function refreshSchwabToken(): Promise<string> {
     refresh_token: tokens.refreshToken,
   });
 
-  const res = await fetch(SCHWAB_TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
-  });
-
-  if (!res.ok) {
+  let data: Record<string, unknown>;
+  try {
+    data = await schwabTokenPost(body, credentials);
+  } catch {
     clearSchwabTokens();
     throw new Error('Schwab session expired. Please reconnect in Settings.');
   }
 
-  const data = await res.json();
   saveSchwabTokens({
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token ?? tokens.refreshToken,
-    expiresAt: Date.now() + (data.expires_in ?? 1800) * 1000,
+    accessToken: data.access_token as string,
+    refreshToken: (data.refresh_token as string) ?? tokens.refreshToken,
+    expiresAt: Date.now() + ((data.expires_in as number) ?? 1800) * 1000,
   });
 
-  return data.access_token;
+  return data.access_token as string;
 }
 
 /** Get a valid access token, refreshing if needed */
