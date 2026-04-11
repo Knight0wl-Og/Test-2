@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Briefcase, RefreshCw, ArrowUpCircle, ArrowDownCircle, Wifi } from 'lucide-react';
+import { Plus, Trash2, Briefcase, RefreshCw, Wifi } from 'lucide-react';
 import clsx from 'clsx';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchBatchQuotes } from '../services/api';
@@ -13,7 +13,6 @@ import {
 } from '../services/schwabService';
 import { useWatchlistStore } from '../store/watchlistStore';
 import { AddPositionModal, type Position } from '../components/portfolio/AddPositionModal';
-import { TradeModal } from '../components/portfolio/TradeModal';
 import type { Quote } from '../types';
 
 const STORAGE_KEY = 'tradeedge_portfolio';
@@ -45,7 +44,6 @@ export function Portfolio() {
   // Manual positions (used when Schwab not connected)
   const [manualPositions, setManualPositions] = useState<Position[]>(() => loadPositions());
   const [showAdd, setShowAdd] = useState(false);
-  const [tradeTarget, setTradeTarget] = useState<{ symbol: string; price: number | null } | null>(null);
 
   const schwabConnected = isSchwabConnected();
 
@@ -176,14 +174,6 @@ export function Portfolio() {
               <Plus className="w-3.5 h-3.5" /> Add Position
             </button>
           )}
-          {usingLive && (
-            <button
-              onClick={() => setTradeTarget({ symbol: '', price: null })}
-              className="flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-            >
-              <ArrowUpCircle className="w-3.5 h-3.5" /> Trade
-            </button>
-          )}
         </div>
       </div>
 
@@ -258,7 +248,7 @@ export function Portfolio() {
                   <th className="text-right px-3 py-2.5 text-text-muted font-medium hidden sm:table-cell">Mkt Value</th>
                   <th className="text-right px-3 py-2.5 text-text-muted font-medium">P&amp;L</th>
                   <th className="text-right px-3 py-2.5 text-text-muted font-medium">Return</th>
-                  <th className="px-3 py-2.5" />
+                  {!usingLive && <th className="px-3 py-2.5" />}
                 </tr>
               </thead>
               <tbody>
@@ -293,25 +283,8 @@ export function Portfolio() {
                       <td className={clsx('px-3 py-2.5 text-right font-semibold num', pnlPos ? 'text-green-400' : 'text-red-400')}>
                         {row.pnlPct != null ? `${row.pnlPct >= 0 ? '+' : ''}${fmt(row.pnlPct)}%` : '—'}
                       </td>
-                      <td className="px-3 py-2.5 text-right">
-                        {usingLive ? (
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => setTradeTarget({ symbol: row.symbol, price: row.currentPrice })}
-                              className="text-green-400/60 hover:text-green-400 transition-colors"
-                              title="Buy"
-                            >
-                              <ArrowUpCircle className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => setTradeTarget({ symbol: row.symbol, price: row.currentPrice })}
-                              className="text-red-400/60 hover:text-red-400 transition-colors"
-                              title="Sell"
-                            >
-                              <ArrowDownCircle className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
+                      {!usingLive && (
+                        <td className="px-3 py-2.5 text-right">
                           <button
                             onClick={() => removeManualPosition(row.id)}
                             className="text-text-muted/40 hover:text-red-400 transition-colors"
@@ -319,8 +292,8 @@ export function Portfolio() {
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        )}
-                      </td>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -333,18 +306,6 @@ export function Portfolio() {
       {/* ── Modals ── */}
       {showAdd && (
         <AddPositionModal onClose={() => setShowAdd(false)} onAdded={handleAddPosition} />
-      )}
-      {tradeTarget && primaryAccount && (
-        <TradeModal
-          symbol={tradeTarget.symbol}
-          currentPrice={tradeTarget.price}
-          accountNumber={primaryAccount.accountNumber}
-          onClose={() => setTradeTarget(null)}
-          onSuccess={() => {
-            setTradeTarget(null);
-            handleRefresh();
-          }}
-        />
       )}
     </div>
   );
