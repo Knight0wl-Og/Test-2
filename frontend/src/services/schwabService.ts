@@ -15,6 +15,7 @@ import { Capacitor } from '@capacitor/core';
 const SCHWAB_AUTH_URL = 'https://api.schwabapi.com/v1/oauth/authorize';
 const SCHWAB_TOKEN_URL = 'https://api.schwabapi.com/v1/oauth/token';
 const SCHWAB_API_BASE = 'https://api.schwabapi.com/marketdata/v1';
+const SCHWAB_TRADER_BASE = 'https://api.schwabapi.com/trader/v1';
 const REDIRECT_URI = 'tradeedge://oauth/callback';
 
 const LS_ACCESS_TOKEN = 'SCHWAB_ACCESS_TOKEN';
@@ -75,11 +76,11 @@ export async function startSchwabOAuth() {
   const clientId = getSchwabClientId();
   if (!clientId) throw new Error('Enter your Schwab Client ID in Settings first.');
 
+  // No scope restriction — full permissions determined by app's API product subscriptions
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,
     redirect_uri: REDIRECT_URI,
-    scope: 'readonly',
   });
 
   const authUrl = `${SCHWAB_AUTH_URL}?${params.toString()}`;
@@ -339,4 +340,144 @@ export async function fetchSchwabOptions(symbol: string, expirationDate?: number
     .sort();
 
   return { symbol, expirationDates: expTimestamps, calls, puts, underlyingPrice };
+}
+
+// ─── Trader API helpers ───────────────────────────────────────────────────────
+
+async function traderGet(path: string, params?: Record<string, string>): Promise<unknown> {
+  const token = await getAccessToken();
+  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+  const url = `${SCHWAB_TRADER_BASE}${path}${qs}`;
+
+  if (Capacitor.isNativePlatform()) {
+    const { CapacitorHttp } = await import('@capacitor/core');
+    const res = await CapacitorHttp.get({
+      url,
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    });
+    if (res.status === 401) { clearSchwabTokens(); throw new Error('Schwab session expired. Reconnect in Settings.'); }
+    if (res.status !== 200) throw new Error(`Schwab Trader API error (${res.status})`);
+    return res.data;
+  }
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  if (res.status === 401) { clearSchwabTokens(); throw new Error('Schwab session expired. Reconnect in Settings.'); }
+  if (!res.ok) throw new Error(`Schwab Trader API error (${res.status})`);
+  return res.json();
+}
+
+async function traderPost(path: string, body: unknown): Promise<void> {
+  const token = await getAccessToken();
+  const url = `${SCHWAB_TRADER_BASE}${path}`;
+
+  if (Capacitor.isNativePlatform()) {
+    const { CapacitorHttp } = await import('@capacitor/core');
+    const res = await CapacitorHttp.post({
+      url,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      data: body,
+    });
+    if (res.status === 401) { clearSchwabTokens(); throw new Error('Schwab session expired. Reconnect in Settings.'); }
+    if (res.status < 200 || res.status >= 300) throw new Error(`Order failed (${res.status})`);
+    return;
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) { clearSchwabTokens(); throw new Error('Schwab session expired. Reconnect in Settings.'); }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Order failed (${res.status})${text ? ': ' + text : ''}`);
+  }
+}
+
+// ─── Account types ────────────────────────────────────────────────────────────
+
+export interface SchwabAccount {
+  accountNumber: string;
+  type: string;
+  cashBalance: number;
+  totalValue: number;
+}
+
+export interface SchwabPosition {
+  symbol: string;
+  longQuantity: number;
+  averagePrice: number;
+  marketValue: number;
+}
+
+export interface SchwabOrder {
+  orderType: 'MARKET' | 'LIMIT';
+  instruction: 'BUY' | 'SELL' | 'SELL_SHORT' | 'BUY_TO_COVER';
+  symbol: string;
+  quantity: number;
+  limitPrice?: number;
+}
+
+// ─── Accounts & Positions ─────────────────────────────────────────────────────
+
+export async function fetchSchwabAccounts(): Promise<SchwabAccount[]> {
+  const data = await traderGet('/accounts', { fields: 'positions' });
+  const accounts = (data as Record<string, unknown>[]) ?? [];
+  return accounts.map((a) => {
+    const acct = (a.securitiesAccount as Record<string, unknown>) ?? a;
+    const bal = (acct.currentBalances as Record<string, unknown>) ?? {};
+    return {
+      accountNumber: (acct.accountNumber as string) ?? '',
+      type: (acct.type as string) ?? 'INDIVIDUAL',
+      cashBalance: (bal.cashBalance as number) ?? 0,
+      totalValue: (bal.liquidationValue as number) ?? (bal.totalCash as number) ?? 0,
+    };
+  });
+}
+
+export async function fetchSchwabPositions(accountNumber: string): Promise<SchwabPosition[]> {
+  const data = await traderGet(`/accounts/${accountNumber}`, { fields: 'positions' });
+  const acct = (data as Record<string, unknown>)?.securitiesAccount as Record<string, unknown> | undefined ?? data as Record<string, unknown>;
+  const positions = (acct?.positions as Record<string, unknown>[]) ?? [];
+  return positions
+    .filter((p) => (p.instrument as Record<string, unknown>)?.assetType === 'EQUITY')
+    .map((p) => ({
+      symbol: ((p.instrument as Record<string, unknown>)?.symbol as string) ?? '',
+      longQuantity: (p.longQuantity as number) ?? 0,
+      averagePrice: (p.averagePrice as number) ?? 0,
+      marketValue: (p.marketValue as number) ?? 0,
+    }))
+    .filter((p) => p.symbol && p.longQuantity > 0);
+}
+
+// ─── Order placement ──────────────────────────────────────────────────────────
+
+export async function placeSchwabOrder(accountNumber: string, order: SchwabOrder): Promise<void> {
+  const body: Record<string, unknown> = {
+    orderType: order.orderType,
+    session: 'NORMAL',
+    duration: 'DAY',
+    orderStrategyType: 'SINGLE',
+    orderLegCollection: [
+      {
+        instruction: order.instruction,
+        quantity: order.quantity,
+        instrument: { symbol: order.symbol, assetType: 'EQUITY' },
+      },
+    ],
+  };
+  if (order.orderType === 'LIMIT' && order.limitPrice != null) {
+    body.price = order.limitPrice.toFixed(2);
+  }
+  await traderPost(`/accounts/${accountNumber}/orders`, body);
 }
