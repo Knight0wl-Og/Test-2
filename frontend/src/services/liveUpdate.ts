@@ -37,9 +37,13 @@ export async function checkAndDownload(
   onUpdate({ state: 'checking', progress: 0 });
 
   try {
+    const ghToken = localStorage.getItem('TRADEEDGE_GH_TOKEN');
+    const headers: Record<string, string> = { Accept: 'application/vnd.github.v3+json' };
+    if (ghToken) headers['Authorization'] = `Bearer ${ghToken}`;
+
     const res = await CapacitorHttp.get({
       url: `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
-      headers: { Accept: 'application/vnd.github.v3+json' },
+      headers,
     });
 
     if (res.status === 404) {

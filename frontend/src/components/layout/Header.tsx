@@ -167,6 +167,7 @@ function UpdateSection() {
 function SettingsModal({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState(localStorage.getItem('TRADEEDGE_API_URL') || 'http://localhost:3001');
   const [anthropicKey, setAnthropicKey] = useState(localStorage.getItem('TRADEEDGE_ANTHROPIC_KEY') || '');
+  const [ghToken, setGhToken] = useState(localStorage.getItem('TRADEEDGE_GH_TOKEN') || '');
   const [finnhubKey, setFinnhubKey] = useState(localStorage.getItem('TRADEEDGE_FINNHUB_KEY') || '');
   const [polygonKey, setPolygonKey] = useState(localStorage.getItem('TRADEEDGE_POLYGON_KEY') || '');
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('TRADEEDGE_GEMINI_KEY') || '');
@@ -180,6 +181,8 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     localStorage.setItem('TRADEEDGE_API_URL', url.trim());
     if (anthropicKey.trim()) localStorage.setItem('TRADEEDGE_ANTHROPIC_KEY', anthropicKey.trim());
     else localStorage.removeItem('TRADEEDGE_ANTHROPIC_KEY');
+    if (ghToken.trim()) localStorage.setItem('TRADEEDGE_GH_TOKEN', ghToken.trim());
+    else localStorage.removeItem('TRADEEDGE_GH_TOKEN');
     if (finnhubKey.trim()) localStorage.setItem('TRADEEDGE_FINNHUB_KEY', finnhubKey.trim());
     else localStorage.removeItem('TRADEEDGE_FINNHUB_KEY');
     if (polygonKey.trim()) localStorage.setItem('TRADEEDGE_POLYGON_KEY', polygonKey.trim());
@@ -326,6 +329,26 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           </button>
           <button onClick={onClose} className="px-4 bg-bg-hover text-text-muted rounded py-2 text-sm transition-colors">Cancel</button>
         </div>
+
+        {/* GitHub Token for private repo updates */}
+        {Capacitor.isNativePlatform() && (
+          <div className="border-t border-border-dim pt-4 mt-1 mb-4">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className="text-xs font-medium text-gray-300">GitHub Token</span>
+              <span className="text-[10px] text-text-muted">(required for updates)</span>
+            </div>
+            <input
+              type="password"
+              value={ghToken}
+              onChange={(e) => setGhToken(e.target.value)}
+              placeholder="github_pat_…"
+              className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono"
+            />
+            <p className="text-[10px] text-text-muted/70 mt-1">
+              Fine-grained PAT with read-only Contents access to your repo. Save & Reload after entering.
+            </p>
+          </div>
+        )}
 
         <UpdateSection />
 
