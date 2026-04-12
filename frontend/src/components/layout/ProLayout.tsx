@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Capacitor } from '@capacitor/core';
-import { Wifi } from 'lucide-react';
+import { AlertTriangle, Wifi } from 'lucide-react';
 import { Header } from './Header';
 import { SymbolBar } from './SymbolBar';
 import { Sidebar } from './Sidebar';
@@ -16,6 +16,7 @@ import { BottomNav } from './BottomNav';
 import { WatchlistPanel } from '../watchlist/WatchlistPanel';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { getSchwabSessionStatus, type SchwabSessionStatus } from '../../services/schwabService';
 
 const ROUTE_MAP: Record<string, string> = {
   dashboard: '/',
@@ -40,6 +41,13 @@ export function ProLayout({ children, isChartView = false }: ProLayoutProps) {
   const queryClient = useQueryClient();
   const selectSymbol = useWatchlistStore((s) => s.selectSymbol);
   const { online } = useNetworkStatus();
+  const [schwabStatus, setSchwabStatus] = useState<SchwabSessionStatus>(() => getSchwabSessionStatus());
+
+  // Re-check Schwab session status every minute
+  useEffect(() => {
+    const id = setInterval(() => setSchwabStatus(getSchwabSessionStatus()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const activeNav =
     Object.entries(ROUTE_MAP).find(([, path]) => path === location.pathname)?.[0] ?? 'dashboard';
@@ -72,6 +80,20 @@ export function ProLayout({ children, isChartView = false }: ProLayoutProps) {
         <div className="flex items-center justify-center gap-2 bg-yellow-900/60 border-b border-yellow-700/40 px-3 py-1 text-[11px] text-yellow-300 shrink-0">
           <Wifi className="w-3 h-3" />
           No connection — showing cached data
+        </div>
+      )}
+
+      {/* Schwab session expiry banner */}
+      {schwabStatus === 'expiring' && (
+        <div className="flex items-center justify-center gap-2 bg-amber-900/50 border-b border-amber-700/40 px-3 py-1 text-[11px] text-amber-300 shrink-0">
+          <AlertTriangle className="w-3 h-3 shrink-0" />
+          Schwab session expires within 24 hours — reconnect in Settings to stay on live data
+        </div>
+      )}
+      {schwabStatus === 'expired' && (
+        <div className="flex items-center justify-center gap-2 bg-red-900/40 border-b border-red-700/40 px-3 py-1 text-[11px] text-red-300 shrink-0">
+          <AlertTriangle className="w-3 h-3 shrink-0" />
+          Schwab session expired — reconnect in Settings to restore live data
         </div>
       )}
 

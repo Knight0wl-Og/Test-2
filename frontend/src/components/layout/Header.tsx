@@ -217,10 +217,9 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  function disconnectSchwab() {
-    localStorage.removeItem('SCHWAB_ACCESS_TOKEN');
-    localStorage.removeItem('SCHWAB_REFRESH_TOKEN');
-    localStorage.removeItem('SCHWAB_TOKEN_EXPIRY');
+  async function disconnectSchwab() {
+    const { disconnectSchwab: doDisconnect } = await import('../../services/schwabService');
+    doDisconnect();
     setSchwabConnected(false);
   }
 

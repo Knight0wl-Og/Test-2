@@ -21,8 +21,12 @@ const REDIRECT_URI = 'https://knight0wl-og.github.io/tradeedge-oauth/';
 const LS_ACCESS_TOKEN = 'SCHWAB_ACCESS_TOKEN';
 const LS_REFRESH_TOKEN = 'SCHWAB_REFRESH_TOKEN';
 const LS_TOKEN_EXPIRY = 'SCHWAB_TOKEN_EXPIRY';
+const LS_REFRESH_EXPIRY = 'SCHWAB_REFRESH_EXPIRY'; // 7-day refresh token lifetime
 const LS_CLIENT_ID = 'TRADEEDGE_SCHWAB_CLIENT_ID';
 const LS_CLIENT_SECRET = 'TRADEEDGE_SCHWAB_CLIENT_SECRET';
+
+const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+const EXPIRY_WARN_MS = 24 * 60 * 60 * 1000; // warn when < 24h left
 
 // ─── Token management ─────────────────────────────────────────────────────────
 
@@ -31,6 +35,8 @@ export interface SchwabTokens {
   refreshToken: string;
   expiresAt: number; // unix ms
 }
+
+export type SchwabSessionStatus = 'connected' | 'expiring' | 'expired' | 'disconnected';
 
 export function getSchwabTokens(): SchwabTokens | null {
   const accessToken = localStorage.getItem(LS_ACCESS_TOKEN);
@@ -44,16 +50,46 @@ export function saveSchwabTokens(tokens: SchwabTokens) {
   localStorage.setItem(LS_ACCESS_TOKEN, tokens.accessToken);
   localStorage.setItem(LS_REFRESH_TOKEN, tokens.refreshToken);
   localStorage.setItem(LS_TOKEN_EXPIRY, String(tokens.expiresAt));
+  // Reset the 7-day refresh token clock every time we get a new token pair
+  localStorage.setItem(LS_REFRESH_EXPIRY, String(Date.now() + REFRESH_TOKEN_TTL));
 }
 
+/** Called on 401 / auto-expiry — keeps REFRESH_EXPIRY so we can show "expired" nudge */
 export function clearSchwabTokens() {
   localStorage.removeItem(LS_ACCESS_TOKEN);
   localStorage.removeItem(LS_REFRESH_TOKEN);
   localStorage.removeItem(LS_TOKEN_EXPIRY);
 }
 
+/** Called when user explicitly disconnects — wipes everything */
+export function disconnectSchwab() {
+  localStorage.removeItem(LS_ACCESS_TOKEN);
+  localStorage.removeItem(LS_REFRESH_TOKEN);
+  localStorage.removeItem(LS_TOKEN_EXPIRY);
+  localStorage.removeItem(LS_REFRESH_EXPIRY);
+}
+
 export function isSchwabConnected(): boolean {
   return !!localStorage.getItem(LS_ACCESS_TOKEN);
+}
+
+/**
+ * Returns the session health:
+ * - 'connected'    — active, refresh token has > 24h remaining
+ * - 'expiring'     — active, refresh token expires within 24h (needs reconnect soon)
+ * - 'expired'      — tokens cleared (auto-expiry), but REFRESH_EXPIRY stamp exists
+ * - 'disconnected' — never connected or manually disconnected
+ */
+export function getSchwabSessionStatus(): SchwabSessionStatus {
+  const hasAccess = !!localStorage.getItem(LS_ACCESS_TOKEN);
+  const refreshExpiry = Number(localStorage.getItem(LS_REFRESH_EXPIRY) ?? '0');
+  const now = Date.now();
+
+  if (refreshExpiry === 0) return 'disconnected';
+  if (!hasAccess && now > refreshExpiry) return 'expired';
+  if (!hasAccess) return 'expired'; // tokens cleared but stamp exists
+  if (refreshExpiry - now < EXPIRY_WARN_MS) return 'expiring';
+  return 'connected';
 }
 
 export function getSchwabClientId(): string {
