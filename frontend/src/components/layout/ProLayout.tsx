@@ -26,6 +26,18 @@ const ROUTE_MAP: Record<string, string> = {
   copilot: '/copilot',
   alerts: '/alerts',
   portfolio: '/portfolio',
+  earnings: '/earnings',
+  'earnings-predictor': '/earnings-predictor',
+  'earnings-visualizer': '/earnings-visualizer',
+  'economic-calendar': '/economic-calendar',
+  'eps-valuation': '/eps-valuation',
+  'etf-flows': '/etf-flows',
+  'pe-analyzer': '/pe-analyzer',
+  'profitability-compare': '/profitability-compare',
+  dividends: '/dividends',
+  'intel-library': '/intel-library',
+  technicals: '/technicals',
+  'covered-call-etfs': '/covered-call-etfs',
 };
 
 interface ProLayoutProps {

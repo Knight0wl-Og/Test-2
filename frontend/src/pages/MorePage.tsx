@@ -27,7 +27,6 @@ const FEATURES: FeatureItem[] = [
     description: 'Market news & analysis',
     path: '/intel-library',
     color: 'text-sky-400 bg-sky-400/10',
-    comingSoon: true,
   },
   {
     icon: Layers,
@@ -35,7 +34,6 @@ const FEATURES: FeatureItem[] = [
     description: 'QYLD, JEPI, JEPQ & more',
     path: '/covered-call-etfs',
     color: 'text-teal-400 bg-teal-400/10',
-    comingSoon: true,
   },
   {
     icon: DollarSign,
@@ -43,7 +41,6 @@ const FEATURES: FeatureItem[] = [
     description: 'History, yield & calendar',
     path: '/dividends',
     color: 'text-green bg-green/10',
-    comingSoon: true,
   },
   {
     icon: Calendar,
@@ -72,7 +69,6 @@ const FEATURES: FeatureItem[] = [
     description: 'CPI, FOMC, GDP & more',
     path: '/economic-calendar',
     color: 'text-rose-400 bg-rose-400/10',
-    comingSoon: true,
   },
   {
     icon: BarChart,
@@ -80,7 +76,6 @@ const FEATURES: FeatureItem[] = [
     description: 'P/E, EPS, forward estimates',
     path: '/eps-valuation',
     color: 'text-indigo-400 bg-indigo-400/10',
-    comingSoon: true,
   },
   {
     icon: BookOpen,
@@ -95,7 +90,6 @@ const FEATURES: FeatureItem[] = [
     description: 'Holdings & flow data',
     path: '/etf-flows',
     color: 'text-yellow-400 bg-yellow-400/10',
-    comingSoon: true,
   },
   {
     icon: GitCompare,
@@ -103,7 +97,6 @@ const FEATURES: FeatureItem[] = [
     description: 'Historical P/E comparison',
     path: '/pe-analyzer',
     color: 'text-orange-400 bg-orange-400/10',
-    comingSoon: true,
   },
   {
     icon: BarChart,
@@ -111,7 +104,6 @@ const FEATURES: FeatureItem[] = [
     description: 'Side-by-side multi-ticker',
     path: '/profitability-compare',
     color: 'text-emerald-400 bg-emerald-400/10',
-    comingSoon: true,
   },
   {
     icon: Search,
@@ -126,7 +118,6 @@ const FEATURES: FeatureItem[] = [
     description: 'RSI, MACD, SMA signals',
     path: '/technicals',
     color: 'text-pink-400 bg-pink-400/10',
-    comingSoon: true,
   },
   // ── Existing features ────────────────────────
   {

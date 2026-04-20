@@ -21,6 +21,15 @@ import { Portfolio } from './pages/Portfolio';
 import { Earnings } from './pages/Earnings';
 import { EarningsPredictor } from './pages/EarningsPredictor';
 import { EarningsVisualizer } from './pages/EarningsVisualizer';
+import { IntelLibrary } from './pages/IntelLibrary';
+import { CoveredCallEtfs } from './pages/CoveredCallEtfs';
+import { Dividends } from './pages/Dividends';
+import { EconomicCalendar } from './pages/EconomicCalendar';
+import { EpsValuation } from './pages/EpsValuation';
+import { EtfFlows } from './pages/EtfFlows';
+import { PeAnalyzer } from './pages/PeAnalyzer';
+import { ProfitabilityCompare } from './pages/ProfitabilityCompare';
+import { Technicals } from './pages/Technicals';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,6 +88,15 @@ export default function App() {
             <Route path="/earnings" element={<Earnings />} />
             <Route path="/earnings-predictor" element={<EarningsPredictor />} />
             <Route path="/earnings-visualizer" element={<EarningsVisualizer />} />
+            <Route path="/intel-library" element={<IntelLibrary />} />
+            <Route path="/covered-call-etfs" element={<CoveredCallEtfs />} />
+            <Route path="/dividends" element={<Dividends />} />
+            <Route path="/economic-calendar" element={<EconomicCalendar />} />
+            <Route path="/eps-valuation" element={<EpsValuation />} />
+            <Route path="/etf-flows" element={<EtfFlows />} />
+            <Route path="/pe-analyzer" element={<PeAnalyzer />} />
+            <Route path="/profitability-compare" element={<ProfitabilityCompare />} />
+            <Route path="/technicals" element={<Technicals />} />
           </Routes>
         </ProLayout>
       </BrowserRouter>

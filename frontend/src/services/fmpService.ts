@@ -90,8 +90,11 @@ export interface FMPKeyMetrics {
   pbRatio: number;
   priceToSalesRatio: number;
   enterpriseValueOverEBITDA: number;
+  enterpriseValue: number;
   roe: number;
   dividendYield: number;
+  earningsYield: number;
+  freeCashFlowYield: number;
   marketCap: number;
 }
 
