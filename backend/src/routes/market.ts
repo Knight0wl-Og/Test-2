@@ -243,5 +243,29 @@ router.get('/options/:symbol', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/fmp/* — proxy Financial Modeling Prep requests
+// Key is read from x-fmp-key header (sent by frontend) or FMP_KEY env var
+router.get('/fmp/*', async (req: Request, res: Response) => {
+  const fmpPath = (req.params as any)[0] as string;
+  const apiKey = (req.headers['x-fmp-key'] as string) || process.env.FMP_KEY || '';
+  if (!apiKey) {
+    res.status(400).json({ error: 'FMP API key not configured' });
+    return;
+  }
+  try {
+    const query = new URLSearchParams({
+      ...(req.query as Record<string, string>),
+      apikey: apiKey,
+    }).toString();
+    const { data } = await axios.get(
+      `https://financialmodelingprep.com/api/${fmpPath}?${query}`,
+      { timeout: 12000 }
+    );
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
 

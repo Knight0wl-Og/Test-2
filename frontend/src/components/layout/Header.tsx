@@ -8,6 +8,7 @@ import { Capacitor } from '@capacitor/core';
 import { checkAndDownload, applyUpdate, type UpdateProgress } from '../../services/liveUpdate';
 import { loadAlerts, removeAlert, type PriceAlert } from '../../services/alertsService';
 import { AddAlertModal } from '../common/AddAlertModal';
+import { getFmpKey, setFmpKey } from '../../services/fmpService';
 import clsx from 'clsx';
 
 interface HeaderProps {
@@ -166,6 +167,7 @@ function UpdateSection() {
 
 function SettingsModal({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState(localStorage.getItem('TRADEEDGE_API_URL') || 'http://localhost:3001');
+  const [fmpKey, setFmpKeyState] = useState(() => getFmpKey());
   const [anthropicKey, setAnthropicKey] = useState(localStorage.getItem('TRADEEDGE_ANTHROPIC_KEY') || '');
   const [finnhubKey, setFinnhubKey] = useState(localStorage.getItem('TRADEEDGE_FINNHUB_KEY') || '');
   const [polygonKey, setPolygonKey] = useState(localStorage.getItem('TRADEEDGE_POLYGON_KEY') || '');
@@ -178,6 +180,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 
   function save() {
     localStorage.setItem('TRADEEDGE_API_URL', url.trim());
+    setFmpKey(fmpKey);
     if (anthropicKey.trim()) localStorage.setItem('TRADEEDGE_ANTHROPIC_KEY', anthropicKey.trim());
     else localStorage.removeItem('TRADEEDGE_ANTHROPIC_KEY');
     if (finnhubKey.trim()) localStorage.setItem('TRADEEDGE_FINNHUB_KEY', finnhubKey.trim());
@@ -300,6 +303,22 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         {/* Market data keys */}
         <div className="mb-1 mt-2">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Market Data — Free Keys</p>
+        </div>
+
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-xs font-medium text-gray-300">FMP API Key</span>
+            <span className="text-[10px] text-green-400 bg-green-400/10 px-1.5 rounded">FREE</span>
+            <a href="https://financialmodelingprep.com/developer/docs" target="_blank" rel="noopener noreferrer" className="text-[10px] text-accent hover:underline ml-auto">financialmodelingprep.com</a>
+          </div>
+          <input
+            type="password"
+            value={fmpKey}
+            onChange={(e) => setFmpKeyState(e.target.value)}
+            placeholder="Your FMP API key"
+            className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono"
+          />
+          <p className="text-[10px] text-text-muted mt-1">250 req/day free · Earnings, Dividends, Technicals, Valuation</p>
         </div>
 
         <div className="mb-4">

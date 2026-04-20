@@ -18,6 +18,9 @@ import { Options } from './pages/Options';
 import { AICopilot } from './pages/AICopilot';
 import { Alerts } from './pages/Alerts';
 import { Portfolio } from './pages/Portfolio';
+import { Earnings } from './pages/Earnings';
+import { EarningsPredictor } from './pages/EarningsPredictor';
+import { EarningsVisualizer } from './pages/EarningsVisualizer';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +76,9 @@ export default function App() {
             <Route path="/copilot" element={<AICopilot />} />
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/portfolio" element={<Portfolio />} />
+            <Route path="/earnings" element={<Earnings />} />
+            <Route path="/earnings-predictor" element={<EarningsPredictor />} />
+            <Route path="/earnings-visualizer" element={<EarningsVisualizer />} />
           </Routes>
         </ProLayout>
       </BrowserRouter>
