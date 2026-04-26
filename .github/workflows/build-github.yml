@@ -152,7 +152,10 @@ jobs:
   create-release:
     needs: [build-windows, build-android]
     runs-on: ubuntu-latest
-    if: always() && github.server_url == 'https://github.com' && (needs.build-windows.result == 'success' || needs.build-android.result == 'success')
+    if: >
+      always() &&
+      github.server_url == 'https://github.com' &&
+      (needs.build-windows.result == 'success' || needs.build-android.result == 'success')
     steps:
       - uses: actions/checkout@v4
 
@@ -170,8 +173,24 @@ jobs:
           path: dist/
         continue-on-error: true
 
-      - name: List downloaded files
-        run: ls -lh dist/ || echo "dist/ is empty"
+      - name: Write release notes
+        run: |
+          echo "## TradeEdge v3.0.0" > release-notes.md
+          echo "" >> release-notes.md
+          echo "### What's New" >> release-notes.md
+          echo "- MarketBrief AI slide deck (Gemini/Groq powered, swipeable slides)" >> release-notes.md
+          echo "- Full Research Hub with 13 feature pages" >> release-notes.md
+          echo "- Intel Library, Covered Call ETFs, Dividends, Earnings suite, Economic Calendar" >> release-notes.md
+          echo "- EPS & Valuation, ETF Flows, P/E Analyzer, Profitability Compare, Technicals" >> release-notes.md
+          echo "- Research Hub section in Sidebar" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "### Downloads" >> release-notes.md
+          echo "- **Windows 10/11** — TradeEdge-Setup-x64.exe (auto-updates silently)" >> release-notes.md
+          echo "- **Android 7+** — TradeEdge.apk (enable Install unknown apps, then tap to install)" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "### Quick Start" >> release-notes.md
+          echo "Both apps launch with live market data immediately — no backend required." >> release-notes.md
+          echo "Add your free FMP key in Settings to unlock all 13 research features." >> release-notes.md
 
       - name: Create GitHub Release
         env:
@@ -192,30 +211,7 @@ jobs:
           [ -f dist/TradeEdge.apk ]           && FILES="$FILES dist/TradeEdge.apk"
           [ -f dist/bundle.zip ]              && FILES="$FILES dist/bundle.zip"
 
-          cat > release-notes.md << EOF
-## TradeEdge ${TAG}
-
-### What's New in v3.0.0
-- MarketBrief AI slide deck (Gemini/Groq powered, swipeable slides)
-- Full Research Hub with 13 feature pages
-- Intel Library, Covered Call ETFs, Dividends, Earnings suite, Economic Calendar
-- EPS & Valuation, ETF Flows, P/E Analyzer, Profitability Compare, Technicals
-- Research Hub section in Sidebar
-- Android build improvements
-
-### Downloads
-Platform | File | Notes
---- | --- | ---
-Windows 10/11 (64-bit) | TradeEdge-Setup-x64.exe | Installer, auto-updates silently
-Android 7+ | TradeEdge.apk | Enable 'Install unknown apps', tap to install
-
-### Quick Start
-Both apps launch with live market data immediately — no backend required.
-Add your free FMP key in Settings to unlock all 13 research features.
-EOF
-
           gh release delete "$TAG" --yes 2>/dev/null || true
-
           gh release create "$TAG" \
             --target "${GITHUB_SHA}" \
             --title "TradeEdge ${TAG}" \
@@ -226,9 +222,9 @@ EOF
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api repos/${{ github.repository }}/actions/artifacts \
-            --jq '.artifacts[] | select(.expired == false) | .id' | \
-          while read id; do
-            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id
+          REPO="${{ github.repository }}"
+          IDS=$(gh api "repos/${REPO}/actions/artifacts" --jq '[.artifacts[] | select(.expired == false) | .id] | .[]')
+          for id in $IDS; do
+            gh api -X DELETE "repos/${REPO}/actions/artifacts/${id}" && echo "Deleted artifact $id"
           done
-          echo "Artifacts cleaned up"
+          echo "Artifact cleanup complete"
