@@ -1,0 +1,230 @@
+name: Build Releases (GitHub)
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - 'release/*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  build-windows:
+    if: github.server_url == 'https://github.com'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build --workspace=frontend
+
+      - name: Build backend
+        run: npm run build --workspace=backend
+
+      - name: Prepare backend node_modules for bundling
+        run: node scripts/prep-backend-bundle.js
+
+      - name: Copy electron to workspace node_modules
+        shell: pwsh
+        run: |
+          $src = Resolve-Path "node_modules/electron"
+          $dst = "electron/node_modules/electron"
+          New-Item -ItemType Directory -Force "electron/node_modules" | Out-Null
+          if (-not (Test-Path $dst)) { Copy-Item -Recurse -Force $src $dst }
+          $ver = (Get-Content "$dst/package.json" | ConvertFrom-Json).version
+          Write-Host "electron $ver ready"
+
+      - name: Copy electron-updater to workspace node_modules
+        shell: pwsh
+        run: |
+          $src = Resolve-Path "node_modules/electron-updater"
+          $dst = "electron/node_modules/electron-updater"
+          New-Item -ItemType Directory -Force "electron/node_modules" | Out-Null
+          if (-not (Test-Path $dst)) { Copy-Item -Recurse -Force $src $dst }
+          Write-Host "electron-updater ready"
+
+      - name: Build Windows installer
+        shell: pwsh
+        working-directory: electron
+        run: npx electron-builder --win --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Find and rename installer
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem "electron/out" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
+          if (-not $files) {
+            Get-ChildItem "electron/out" -Recurse | ForEach-Object { Write-Host $_.FullName }
+            Write-Error "No .exe found"
+            exit 1
+          }
+          $src = $files | Select-Object -First 1
+          Write-Host "Found: $($src.FullName)"
+          Copy-Item $src.FullName "electron/out/TradeEdge-Setup-x64.exe"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            electron/out/TradeEdge-Setup-x64.exe
+            electron/out/latest.yml
+          retention-days: 1
+
+  build-android:
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK platform 34
+        run: |
+          yes | sdkmanager --licenses 2>/dev/null || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build --workspace=frontend
+
+      - name: Create OTA bundle zip
+        run: cd frontend/dist && zip -r ../../bundle.zip .
+
+      - name: Copy web assets into Android platform
+        run: |
+          mkdir -p frontend/android/app/src/main/assets/public
+          cp -r frontend/dist/. frontend/android/app/src/main/assets/public/
+
+      - name: Write local.properties
+        working-directory: frontend/android
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "sdk.dir=$SDK" > local.properties
+
+      - name: Build debug APK
+        working-directory: frontend/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+        env:
+          GRADLE_OPTS: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
+
+      - name: Rename APK
+        run: cp frontend/android/app/build/outputs/apk/debug/app-debug.apk TradeEdge.apk
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-artifacts
+          path: |
+            TradeEdge.apk
+            bundle.zip
+          retention-days: 1
+
+  create-release:
+    needs: [build-windows, build-android]
+    runs-on: ubuntu-latest
+    if: always() && github.server_url == 'https://github.com' && (needs.build-windows.result == 'success' || needs.build-android.result == 'success')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/
+        continue-on-error: true
+
+      - name: Download Android artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-artifacts
+          path: dist/
+        continue-on-error: true
+
+      - name: List downloaded files
+        run: ls -lh dist/ || echo "dist/ is empty"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REF="${GITHUB_REF}"
+          if [[ "$REF" == refs/tags/* ]]; then
+            TAG="${REF#refs/tags/}"
+          elif [[ "$REF" == refs/heads/release/* ]]; then
+            TAG="${REF#refs/heads/release/}"
+          else
+            TAG="v3.0.0"
+          fi
+
+          FILES=""
+          [ -f dist/TradeEdge-Setup-x64.exe ] && FILES="$FILES dist/TradeEdge-Setup-x64.exe"
+          [ -f dist/latest.yml ]              && FILES="$FILES dist/latest.yml"
+          [ -f dist/TradeEdge.apk ]           && FILES="$FILES dist/TradeEdge.apk"
+          [ -f dist/bundle.zip ]              && FILES="$FILES dist/bundle.zip"
+
+          gh release delete "$TAG" --yes 2>/dev/null || true
+
+          gh release create "$TAG" \
+            --target "${GITHUB_SHA}" \
+            --title "TradeEdge $TAG" \
+            --notes "## TradeEdge $TAG
+
+### What's New in v3.0.0
+- MarketBrief AI slide deck (Gemini/Groq powered, swipeable slides)
+- Full Research Hub with 13 feature pages
+- Intel Library, Covered Call ETFs, Dividends, Earnings suite, Economic Calendar
+- EPS & Valuation, ETF Flows, P/E Analyzer, Profitability Compare, Technicals
+- Research Hub section in Sidebar
+- Android build improvements
+
+### Downloads
+| Platform | File | Notes |
+|---|---|---|
+| Windows 10/11 (64-bit) | \`TradeEdge-Setup-x64.exe\` | Installer — auto-updates silently |
+| Android 7+ | \`TradeEdge.apk\` | Enable 'Install unknown apps', tap to install |
+
+### Quick Start
+Both apps launch with live market data immediately — no backend required.
+Add your free FMP key in Settings to unlock all 13 research features." \
+            $FILES
+
+      - name: Delete artifacts to free storage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ github.repository }}/actions/artifacts \
+            --jq '.artifacts[] | select(.expired == false) | .id' | \
+          while read id; do
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id
+          done
+          echo "Artifacts cleaned up"
