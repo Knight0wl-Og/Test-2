@@ -12,8 +12,8 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build-desktop:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -21,6 +21,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Install FUSE (required for AppImage)
+        run: sudo apt-get install -y fuse libfuse2
 
       - name: Install dependencies
         run: npm ci
@@ -35,51 +38,30 @@ jobs:
         run: node scripts/prep-backend-bundle.js
 
       - name: Copy electron to workspace node_modules
-        shell: pwsh
         run: |
-          $src = Resolve-Path "node_modules/electron"
-          $dst = "electron/node_modules/electron"
-          New-Item -ItemType Directory -Force "electron/node_modules" | Out-Null
-          if (-not (Test-Path $dst)) { Copy-Item -Recurse -Force $src $dst }
-          $ver = (Get-Content "$dst/package.json" | ConvertFrom-Json).version
-          Write-Host "electron $ver ready"
+          mkdir -p electron/node_modules
+          if [ ! -d "electron/node_modules/electron" ]; then
+            cp -r node_modules/electron electron/node_modules/electron
+          fi
+          echo "electron ready"
 
       - name: Copy electron-updater to workspace node_modules
-        shell: pwsh
         run: |
-          $src = Resolve-Path "node_modules/electron-updater"
-          $dst = "electron/node_modules/electron-updater"
-          New-Item -ItemType Directory -Force "electron/node_modules" | Out-Null
-          if (-not (Test-Path $dst)) { Copy-Item -Recurse -Force $src $dst }
-          Write-Host "electron-updater ready"
+          mkdir -p electron/node_modules
+          if [ ! -d "electron/node_modules/electron-updater" ]; then
+            cp -r node_modules/electron-updater electron/node_modules/electron-updater
+          fi
+          echo "electron-updater ready"
 
-      - name: Build Windows installer
-        shell: pwsh
+      - name: Build Linux AppImage
         working-directory: electron
-        run: npx electron-builder --win --publish=always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --linux --publish=never
 
-      - name: Find and rename installer
-        shell: pwsh
-        run: |
-          $files = Get-ChildItem "electron/out" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
-          if (-not $files) {
-            Get-ChildItem "electron/out" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-            Write-Error "No .exe found"
-            exit 1
-          }
-          $src = $files | Select-Object -First 1
-          Write-Host "Found: $($src.FullName)"
-          Copy-Item $src.FullName "electron/out/TradeEdge-Setup-x64.exe"
-
-      - name: Upload Windows installer artifact
+      - name: Upload desktop artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-installer
-          path: |
-            electron/out/TradeEdge-Setup-x64.exe
-            electron/out/latest.yml
+          name: desktop-app
+          path: electron/out/*.AppImage
           retention-days: 3
 
   build-android:
@@ -154,16 +136,16 @@ jobs:
           retention-days: 3
 
   create-release:
-    needs: [build-windows, build-android]
+    needs: [build-desktop, build-android]
     runs-on: ubuntu-latest
-    if: always() && (needs.build-windows.result == 'success' || needs.build-android.result == 'success')
+    if: always() && (needs.build-desktop.result == 'success' || needs.build-android.result == 'success')
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Windows installer
+      - name: Download desktop artifact
         uses: actions/download-artifact@v4
         with:
-          name: windows-installer
+          name: desktop-app
           path: dist/
         continue-on-error: true
 
@@ -177,9 +159,9 @@ jobs:
       - name: List downloaded files
         run: ls -lh dist/ || echo "dist/ is empty"
 
-      - name: Create GitHub Release
+      - name: Create Codeberg Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REF="${GITHUB_REF}"
           if [[ "$REF" == refs/tags/* ]]; then
@@ -187,36 +169,63 @@ jobs:
           elif [[ "$REF" == refs/heads/release/* ]]; then
             TAG="${REF#refs/heads/release/}"
           else
-            TAG="v1.0.0"
+            TAG="v3.0.0"
           fi
 
-          FILES=""
-          [ -f dist/TradeEdge-Setup-x64.exe ] && FILES="$FILES dist/TradeEdge-Setup-x64.exe"
-          [ -f dist/latest.yml ] && FILES="$FILES dist/latest.yml"
-          [ -f dist/TradeEdge.apk ] && FILES="$FILES dist/TradeEdge.apk"
-          [ -f dist/bundle.zip ] && FILES="$FILES dist/bundle.zip"
+          echo "Creating release for tag: $TAG"
 
-          echo "Files to release: $FILES"
+          RESP=$(curl -s -X POST \
+            "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases" \
+            -H "Authorization: token $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"tag_name\": \"$TAG\",
+              \"name\": \"TradeEdge $TAG\",
+              \"draft\": false,
+              \"prerelease\": false,
+              \"body\": \"## TradeEdge $TAG\n\n### What's New in v3.0.0\n- MarketBrief AI slide deck (Gemini/Groq powered, swipeable slides)\n- Full Research Hub with 13 feature pages\n- Intel Library, Covered Call ETFs, Dividends, Earnings suite, Economic Calendar\n- EPS & Valuation, ETF Flows, P/E Analyzer, Profitability Compare, Technicals\n- Research Hub section in Sidebar\n- Android build improvements\n\n### Downloads\n| Platform | File | Notes |\n|---|---|---|\n| Linux (64-bit) | \`TradeEdge.AppImage\` | \`chmod +x\` then run |\n| Android 7+ | \`TradeEdge.apk\` | Enable 'Install unknown apps', tap to install |\n\n### Quick Start\nBoth apps launch with live market data immediately — no backend required. Add your free FMP key in Settings to unlock all 13 research features.\"
+            }")
 
-          gh release delete "$TAG" --yes 2>/dev/null || true
+          echo "Release response: $RESP"
+          RELEASE_ID=$(echo "$RESP" | jq -r '.id')
 
-          gh release create "$TAG" \
-            --target "${GITHUB_SHA}" \
-            --title "TradeEdge $TAG" \
-            --notes "## TradeEdge $TAG
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "ERROR: Failed to create release"
+            exit 1
+          fi
 
-          ### Downloads
-          | Platform | File | Notes |
-          |---|---|---|
-          | Windows 10/11 (64-bit) | \`TradeEdge-Setup-x64.exe\` | Installer — auto-updates silently after install |
-          | Android 7+ | \`TradeEdge.apk\` | Enable \"Install unknown apps\", tap APK to install |
+          echo "Release ID: $RELEASE_ID"
 
-          ### Auto-Updates
-          - **Windows**: The app checks for updates on launch and installs them when you quit.
-          - **Android**: The app downloads new versions silently and reloads automatically.
+          # Upload AppImage
+          for f in dist/*.AppImage; do
+            [ -f "$f" ] || continue
+            FNAME=$(basename "$f")
+            echo "Uploading $FNAME..."
+            curl -s -X POST \
+              "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=$FNAME" \
+              -H "Authorization: token $TOKEN" \
+              -F "attachment=@$f"
+            echo ""
+          done
 
-          ### Quick Start
-          Both apps launch with **live market data** immediately — no backend required.
+          # Upload APK
+          if [ -f dist/TradeEdge.apk ]; then
+            echo "Uploading TradeEdge.apk..."
+            curl -s -X POST \
+              "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=TradeEdge.apk" \
+              -H "Authorization: token $TOKEN" \
+              -F "attachment=@dist/TradeEdge.apk"
+            echo ""
+          fi
 
-          See [INSTALL.md](https://github.com/${{ github.repository }}/blob/main/INSTALL.md) for full setup instructions." \
-            $FILES
+          # Upload OTA bundle
+          if [ -f dist/bundle.zip ]; then
+            echo "Uploading bundle.zip..."
+            curl -s -X POST \
+              "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=bundle.zip" \
+              -H "Authorization: token $TOKEN" \
+              -F "attachment=@dist/bundle.zip"
+            echo ""
+          fi
+
+          echo "Done: https://codeberg.org/Knight0wl/TradeEdge/releases/tag/$TAG"

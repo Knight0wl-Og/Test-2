@@ -1,6 +1,6 @@
 {
   "name": "tradeedge-electron",
-  "version": "1.5.1",
+  "version": "3.0.0",
   "private": true,
   "main": "src/main.js",
   "scripts": {
@@ -24,9 +24,10 @@
     "copyright": "Copyright 2025 TradeEdge",
     "icon": "assets/icon.png",
     "publish": {
-      "provider": "github",
-      "owner": "Knight0wl-Og",
-      "repo": "Test-2"
+      "provider": "gitea",
+      "host": "https://codeberg.org",
+      "owner": "Knight0wl",
+      "repo": "TradeEdge"
     },
     "directories": {
       "output": "out",
