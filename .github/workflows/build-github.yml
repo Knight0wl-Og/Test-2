@@ -192,12 +192,8 @@ jobs:
           [ -f dist/TradeEdge.apk ]           && FILES="$FILES dist/TradeEdge.apk"
           [ -f dist/bundle.zip ]              && FILES="$FILES dist/bundle.zip"
 
-          gh release delete "$TAG" --yes 2>/dev/null || true
-
-          gh release create "$TAG" \
-            --target "${GITHUB_SHA}" \
-            --title "TradeEdge $TAG" \
-            --notes "## TradeEdge $TAG
+          cat > release-notes.md << EOF
+## TradeEdge ${TAG}
 
 ### What's New in v3.0.0
 - MarketBrief AI slide deck (Gemini/Groq powered, swipeable slides)
@@ -208,14 +204,22 @@ jobs:
 - Android build improvements
 
 ### Downloads
-| Platform | File | Notes |
-|---|---|---|
-| Windows 10/11 (64-bit) | \`TradeEdge-Setup-x64.exe\` | Installer — auto-updates silently |
-| Android 7+ | \`TradeEdge.apk\` | Enable 'Install unknown apps', tap to install |
+Platform | File | Notes
+--- | --- | ---
+Windows 10/11 (64-bit) | TradeEdge-Setup-x64.exe | Installer, auto-updates silently
+Android 7+ | TradeEdge.apk | Enable 'Install unknown apps', tap to install
 
 ### Quick Start
 Both apps launch with live market data immediately — no backend required.
-Add your free FMP key in Settings to unlock all 13 research features." \
+Add your free FMP key in Settings to unlock all 13 research features.
+EOF
+
+          gh release delete "$TAG" --yes 2>/dev/null || true
+
+          gh release create "$TAG" \
+            --target "${GITHUB_SHA}" \
+            --title "TradeEdge ${TAG}" \
+            --notes-file release-notes.md \
             $FILES
 
       - name: Delete artifacts to free storage
