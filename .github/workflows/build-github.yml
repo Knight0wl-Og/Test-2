@@ -13,8 +13,31 @@ permissions:
   actions: write
 
 jobs:
+  # Delete all leftover artifacts from previous runs before starting new builds.
+  # Keeps the 0.5 GB storage limit from filling up across failed/partial runs.
+  cleanup-artifacts:
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete all existing artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          IDS=$(gh api "repos/${REPO}/actions/artifacts" \
+            --jq '[.artifacts[] | select(.expired == false) | .id] | .[]' 2>/dev/null || echo "")
+          if [ -z "$IDS" ]; then
+            echo "No artifacts to delete"
+          else
+            for id in $IDS; do
+              gh api -X DELETE "repos/${REPO}/actions/artifacts/${id}" && echo "Deleted artifact $id"
+            done
+          fi
+          echo "Pre-cleanup complete"
+
   build-windows:
     if: github.server_url == 'https://github.com'
+    needs: [cleanup-artifacts]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,6 +109,7 @@ jobs:
 
   build-android:
     if: github.server_url == 'https://github.com'
+    needs: [cleanup-artifacts]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -99,10 +123,10 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK platform 34
+      - name: Install Android SDK platform 36
         run: |
           yes | sdkmanager --licenses 2>/dev/null || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -175,22 +199,24 @@ jobs:
 
       - name: Write release notes
         run: |
-          echo "## TradeEdge v3.0.0" > release-notes.md
-          echo "" >> release-notes.md
-          echo "### What's New" >> release-notes.md
-          echo "- MarketBrief AI slide deck (Gemini/Groq powered, swipeable slides)" >> release-notes.md
-          echo "- Full Research Hub with 13 feature pages" >> release-notes.md
-          echo "- Intel Library, Covered Call ETFs, Dividends, Earnings suite, Economic Calendar" >> release-notes.md
-          echo "- EPS & Valuation, ETF Flows, P/E Analyzer, Profitability Compare, Technicals" >> release-notes.md
-          echo "- Research Hub section in Sidebar" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "### Downloads" >> release-notes.md
-          echo "- **Windows 10/11** — TradeEdge-Setup-x64.exe (auto-updates silently)" >> release-notes.md
-          echo "- **Android 7+** — TradeEdge.apk (enable Install unknown apps, then tap to install)" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "### Quick Start" >> release-notes.md
-          echo "Both apps launch with live market data immediately — no backend required." >> release-notes.md
-          echo "Add your free FMP key in Settings to unlock all 13 research features." >> release-notes.md
+          cat > release-notes.md << 'EOF'
+          ## TradeEdge v3.0.0
+
+          ### What's New
+          - MarketBrief AI slide deck (Gemini/Groq powered, swipeable slides)
+          - Full Research Hub with 13 feature pages
+          - Intel Library, Covered Call ETFs, Dividends, Earnings suite, Economic Calendar
+          - EPS & Valuation, ETF Flows, P/E Analyzer, Profitability Compare, Technicals
+          - Research Hub section in Sidebar
+
+          ### Downloads
+          - **Windows 10/11** — TradeEdge-Setup-x64.exe (auto-updates silently)
+          - **Android 7+** — TradeEdge.apk (enable Install unknown apps, then tap to install)
+
+          ### Quick Start
+          Both apps launch with live market data immediately — no backend required.
+          Add your free FMP key in Settings to unlock all 13 research features.
+          EOF
 
       - name: Create GitHub Release
         env:
@@ -218,13 +244,15 @@ jobs:
             --notes-file release-notes.md \
             $FILES
 
-      - name: Delete artifacts to free storage
+      - name: Delete all artifacts to free storage
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REPO="${{ github.repository }}"
-          IDS=$(gh api "repos/${REPO}/actions/artifacts" --jq '[.artifacts[] | select(.expired == false) | .id] | .[]')
+          IDS=$(gh api "repos/${REPO}/actions/artifacts" \
+            --jq '[.artifacts[] | select(.expired == false) | .id] | .[]' 2>/dev/null || echo "")
           for id in $IDS; do
             gh api -X DELETE "repos/${REPO}/actions/artifacts/${id}" && echo "Deleted artifact $id"
           done
-          echo "Artifact cleanup complete"
+          echo "Post-cleanup complete"
