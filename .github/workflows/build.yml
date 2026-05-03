@@ -104,7 +104,7 @@ jobs:
       - name: Install Android SDK platform 34
         run: |
           yes | sdkmanager --licenses 2>/dev/null || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
