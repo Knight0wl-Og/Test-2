@@ -15,6 +15,9 @@ jobs:
   build-desktop:
     runs-on: self-hosted
     steps:
+      - name: Init shared artifact directory
+        run: rm -rf /tmp/tradeedge-out && mkdir -p /tmp/tradeedge-out
+
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -56,12 +59,10 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: 1
 
-      - name: Upload desktop artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: desktop-app
-          path: electron/out/*.AppImage
-          retention-days: 3
+      - name: Save desktop artifact
+        run: |
+          cp electron/out/*.AppImage /tmp/tradeedge-out/ 2>/dev/null && echo "AppImage saved" || echo "No AppImage found"
+          ls -lh /tmp/tradeedge-out/
 
   build-android:
     runs-on: self-hosted
@@ -146,14 +147,11 @@ jobs:
       - name: Rename APK
         run: cp frontend/android/app/build/outputs/apk/debug/app-debug.apk TradeEdge.apk
 
-      - name: Upload Android artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-artifacts
-          path: |
-            TradeEdge.apk
-            bundle.zip
-          retention-days: 3
+      - name: Save Android artifacts
+        run: |
+          cp TradeEdge.apk /tmp/tradeedge-out/ 2>/dev/null && echo "APK saved" || echo "No APK found"
+          cp bundle.zip /tmp/tradeedge-out/ 2>/dev/null && echo "bundle.zip saved" || echo "No bundle.zip found"
+          ls -lh /tmp/tradeedge-out/
 
   create-release:
     needs: [build-desktop, build-android]
@@ -162,22 +160,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download desktop artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: desktop-app
-          path: dist/
-        continue-on-error: true
-
-      - name: Download Android artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: android-artifacts
-          path: dist/
-        continue-on-error: true
-
-      - name: List downloaded files
-        run: ls -lh dist/ || echo "dist/ is empty"
+      - name: List release files
+        run: ls -lh /tmp/tradeedge-out/ || echo "No artifacts in /tmp/tradeedge-out/"
 
       - name: Create Codeberg Release
         env:
@@ -217,7 +201,7 @@ jobs:
           echo "Release ID: $RELEASE_ID"
 
           # Upload AppImage
-          for f in dist/*.AppImage; do
+          for f in /tmp/tradeedge-out/*.AppImage; do
             [ -f "$f" ] || continue
             FNAME=$(basename "$f")
             echo "Uploading $FNAME..."
@@ -229,23 +213,27 @@ jobs:
           done
 
           # Upload APK
-          if [ -f dist/TradeEdge.apk ]; then
+          if [ -f /tmp/tradeedge-out/TradeEdge.apk ]; then
             echo "Uploading TradeEdge.apk..."
             curl -s -X POST \
               "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=TradeEdge.apk" \
               -H "Authorization: token $TOKEN" \
-              -F "attachment=@dist/TradeEdge.apk"
+              -F "attachment=@/tmp/tradeedge-out/TradeEdge.apk"
             echo ""
           fi
 
           # Upload OTA bundle
-          if [ -f dist/bundle.zip ]; then
+          if [ -f /tmp/tradeedge-out/bundle.zip ]; then
             echo "Uploading bundle.zip..."
             curl -s -X POST \
               "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=bundle.zip" \
               -H "Authorization: token $TOKEN" \
-              -F "attachment=@dist/bundle.zip"
+              -F "attachment=@/tmp/tradeedge-out/bundle.zip"
             echo ""
           fi
 
           echo "Done: https://codeberg.org/Knight0wl/TradeEdge/releases/tag/$TAG"
+
+      - name: Cleanup artifact directory
+        if: always()
+        run: rm -rf /tmp/tradeedge-out
