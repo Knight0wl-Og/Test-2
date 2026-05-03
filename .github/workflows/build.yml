@@ -161,6 +161,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install jq
+        run: apt-get install -y jq
+
       - name: List release files
         run: ls -lh /tmp/tradeedge-out/ || echo "No artifacts in /tmp/tradeedge-out/"
 
