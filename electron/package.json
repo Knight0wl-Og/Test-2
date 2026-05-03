@@ -24,10 +24,8 @@
     "copyright": "Copyright 2025 TradeEdge",
     "icon": "assets/icon.png",
     "publish": {
-      "provider": "gitea",
-      "host": "https://codeberg.org",
-      "owner": "Knight0wl",
-      "repo": "TradeEdge"
+      "provider": "generic",
+      "url": "https://codeberg.org/Knight0wl/TradeEdge/releases/download/latest"
     },
     "directories": {
       "output": "out",
