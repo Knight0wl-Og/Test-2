@@ -89,7 +89,7 @@ jobs:
 
       - name: Setup Android SDK manually
         run: |
-          apt-get update -qq && apt-get install -y wget unzip
+          apt-get update -qq && apt-get install -y wget unzip zip
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdtools.zip
           mkdir -p /opt/android-sdk/cmdline-tools
           unzip -q /tmp/cmdtools.zip -d /opt/android-sdk/cmdline-tools
@@ -177,6 +177,16 @@ jobs:
           fi
 
           echo "Creating release for tag: $TAG"
+
+          # Delete any existing release for this tag (idempotent re-runs)
+          EXISTING=$(curl -s "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/tags/$TAG" \
+            -H "Authorization: token $TOKEN" | jq -r '.id // empty')
+          if [ -n "$EXISTING" ]; then
+            echo "Deleting existing release $EXISTING..."
+            curl -s -X DELETE \
+              "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$EXISTING" \
+              -H "Authorization: token $TOKEN"
+          fi
 
           RESP=$(curl -s -X POST \
             "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases" \
