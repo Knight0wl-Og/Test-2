@@ -149,6 +149,7 @@ jobs:
 
       - name: Save Android artifacts
         run: |
+          mkdir -p /tmp/tradeedge-out
           cp TradeEdge.apk /tmp/tradeedge-out/ 2>/dev/null && echo "APK saved" || echo "No APK found"
           cp bundle.zip /tmp/tradeedge-out/ 2>/dev/null && echo "bundle.zip saved" || echo "No bundle.zip found"
           ls -lh /tmp/tradeedge-out/
