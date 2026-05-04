@@ -214,36 +214,42 @@ jobs:
 
           echo "Release ID: $RELEASE_ID"
 
+          upload_asset() {
+            local FILE="$1"
+            local NAME="$2"
+            echo "Uploading $NAME ($(du -sh "$FILE" | cut -f1))..."
+            RESP=$(curl -w "\nHTTP_STATUS:%{http_code}" -X POST \
+              "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=$NAME" \
+              -H "Authorization: token $TOKEN" \
+              -F "attachment=@$FILE")
+            HTTP_STATUS=$(echo "$RESP" | grep "HTTP_STATUS:" | cut -d: -f2)
+            BODY=$(echo "$RESP" | grep -v "HTTP_STATUS:")
+            echo "Response ($HTTP_STATUS): $BODY"
+            if [ "$HTTP_STATUS" != "201" ]; then
+              echo "WARNING: Upload of $NAME may have failed (HTTP $HTTP_STATUS)"
+            else
+              echo "OK: $NAME uploaded successfully"
+            fi
+          }
+
           # Upload AppImage
           for f in /tmp/tradeedge-out/*.AppImage; do
-            [ -f "$f" ] || continue
-            FNAME=$(basename "$f")
-            echo "Uploading $FNAME..."
-            curl -s -X POST \
-              "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=$FNAME" \
-              -H "Authorization: token $TOKEN" \
-              -F "attachment=@$f"
-            echo ""
+            [ -f "$f" ] || { echo "No AppImage found in /tmp/tradeedge-out/"; continue; }
+            upload_asset "$f" "$(basename "$f")"
           done
 
           # Upload APK
           if [ -f /tmp/tradeedge-out/TradeEdge.apk ]; then
-            echo "Uploading TradeEdge.apk..."
-            curl -s -X POST \
-              "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=TradeEdge.apk" \
-              -H "Authorization: token $TOKEN" \
-              -F "attachment=@/tmp/tradeedge-out/TradeEdge.apk"
-            echo ""
+            upload_asset /tmp/tradeedge-out/TradeEdge.apk TradeEdge.apk
+          else
+            echo "No APK found in /tmp/tradeedge-out/"
           fi
 
           # Upload OTA bundle
           if [ -f /tmp/tradeedge-out/bundle.zip ]; then
-            echo "Uploading bundle.zip..."
-            curl -s -X POST \
-              "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=bundle.zip" \
-              -H "Authorization: token $TOKEN" \
-              -F "attachment=@/tmp/tradeedge-out/bundle.zip"
-            echo ""
+            upload_asset /tmp/tradeedge-out/bundle.zip bundle.zip
+          else
+            echo "No bundle.zip found in /tmp/tradeedge-out/"
           fi
 
           echo "Done: https://codeberg.org/Knight0wl/TradeEdge/releases/tag/$TAG"
