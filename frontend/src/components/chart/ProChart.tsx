@@ -40,8 +40,8 @@ interface OHLCTooltip {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const TIMEFRAME_CONFIG: Record<Timeframe, { period: string; interval: string; isIntraday: boolean }> = {
-  '5m':  { period: '3mo',  interval: '5m',  isIntraday: true  },
-  '15m': { period: '3mo',  interval: '15m', isIntraday: true  },
+  '5m':  { period: '1mo',  interval: '5m',  isIntraday: true  },  // YF max ~60d for 5m
+  '15m': { period: '1mo',  interval: '15m', isIntraday: true  },  // YF max ~60d for 15m
   '30m': { period: '3mo',  interval: '30m', isIntraday: true  },
   '1h':  { period: '2y',   interval: '60m', isIntraday: true  },
   '4h':  { period: '2y',   interval: '60m', isIntraday: false },
