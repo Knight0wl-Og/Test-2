@@ -12,14 +12,12 @@ permissions:
   contents: write
 
 jobs:
-  build-desktop:
+  build-and-release:
     runs-on: self-hosted
     steps:
-      - name: Init shared artifact directory
-        run: rm -rf /tmp/tradeedge-out && mkdir -p /tmp/tradeedge-out
-
       - uses: actions/checkout@v4
 
+      # ── Node & JS deps ────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -28,6 +26,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # ── Frontend & Backend ────────────────────────────────────────────
       - name: Build frontend
         run: npm run build --workspace=frontend
 
@@ -37,21 +36,12 @@ jobs:
       - name: Prepare backend node_modules for bundling
         run: node scripts/prep-backend-bundle.js
 
-      - name: Copy electron to workspace node_modules
+      # ── Electron (Linux AppImage) ─────────────────────────────────────
+      - name: Copy electron deps to workspace node_modules
         run: |
           mkdir -p electron/node_modules
-          if [ ! -d "electron/node_modules/electron" ]; then
-            cp -r node_modules/electron electron/node_modules/electron
-          fi
-          echo "electron ready"
-
-      - name: Copy electron-updater to workspace node_modules
-        run: |
-          mkdir -p electron/node_modules
-          if [ ! -d "electron/node_modules/electron-updater" ]; then
-            cp -r node_modules/electron-updater electron/node_modules/electron-updater
-          fi
-          echo "electron-updater ready"
+          [ -d electron/node_modules/electron ] || cp -r node_modules/electron electron/node_modules/electron
+          [ -d electron/node_modules/electron-updater ] || cp -r node_modules/electron-updater electron/node_modules/electron-updater
 
       - name: Build Linux AppImage
         working-directory: electron
@@ -59,22 +49,14 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: 1
 
-      - name: Save desktop artifact
-        run: |
-          cp electron/out/*.AppImage /tmp/tradeedge-out/ 2>/dev/null && echo "AppImage saved" || echo "No AppImage found"
-          ls -lh /tmp/tradeedge-out/
+      - name: Verify AppImage
+        run: ls -lh electron/out/*.AppImage
 
-  build-android:
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v4
-
-      # Java 21 required: @capacitor/browser compiles with sourceCompatibility VERSION_21
-      # Use Adoptium (Temurin) repo — openjdk-21 isn't in default Ubuntu apt repos
+      # ── Java 21 ───────────────────────────────────────────────────────
       - name: Setup Java 21
         run: |
           apt-get update -qq
-          apt-get install -y wget gnupg apt-transport-https
+          apt-get install -y wget gnupg apt-transport-https unzip zip
           wget -q https://packages.adoptium.net/artifactory/api/gpg/key/public -O /tmp/adoptium.gpg
           gpg --dearmor < /tmp/adoptium.gpg > /etc/apt/trusted.gpg.d/adoptium.gpg
           rm /tmp/adoptium.gpg
@@ -87,9 +69,9 @@ jobs:
           echo "$JAVA_HOME/bin" >> $GITHUB_PATH
           java -version
 
-      - name: Setup Android SDK manually
+      # ── Android SDK ───────────────────────────────────────────────────
+      - name: Setup Android SDK
         run: |
-          apt-get update -qq && apt-get install -y wget unzip zip
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdtools.zip
           mkdir -p /opt/android-sdk/cmdline-tools
           unzip -q /tmp/cmdtools.zip -d /opt/android-sdk/cmdline-tools
@@ -99,75 +81,41 @@ jobs:
           echo "ANDROID_HOME=/opt/android-sdk" >> $GITHUB_ENV
           echo "/opt/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "/opt/android-sdk/platform-tools" >> $GITHUB_PATH
-          echo "Android SDK installed at /opt/android-sdk"
 
-      - name: Install Android SDK platform 34
+      - name: Install Android SDK platform 36
         run: |
           yes | sdkmanager --licenses 2>/dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build frontend
-        run: npm run build --workspace=frontend
-
+      # ── Android APK ───────────────────────────────────────────────────
       - name: Create OTA bundle zip
         run: cd frontend/dist && zip -r ../../bundle.zip .
 
-      # Skip 'cap sync' (fragile, needs TS compilation) — android/ is committed.
-      # Just copy the built web assets into the platform assets folder directly.
       - name: Copy web assets into Android platform
         run: |
           mkdir -p frontend/android/app/src/main/assets/public
           cp -r frontend/dist/. frontend/android/app/src/main/assets/public/
-          echo "Assets copied:"
-          ls frontend/android/app/src/main/assets/public/ | head -10
 
-      - name: Write local.properties (Android SDK path)
+      - name: Write local.properties
         working-directory: frontend/android
-        run: |
-          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          echo "sdk.dir=$SDK" > local.properties
-          echo "sdk.dir is: $SDK"
+        run: echo "sdk.dir=${ANDROID_SDK_ROOT:-$ANDROID_HOME}" > local.properties
 
       - name: Build debug APK
         working-directory: frontend/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace --info
+          ./gradlew assembleDebug --no-daemon --stacktrace
         env:
           GRADLE_OPTS: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
 
-      - name: Rename APK
-        run: cp frontend/android/app/build/outputs/apk/debug/app-debug.apk TradeEdge.apk
+      - name: Verify APK
+        run: ls -lh frontend/android/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Save Android artifacts
-        run: |
-          mkdir -p /tmp/tradeedge-out
-          cp TradeEdge.apk /tmp/tradeedge-out/ 2>/dev/null && echo "APK saved" || echo "No APK found"
-          cp bundle.zip /tmp/tradeedge-out/ 2>/dev/null && echo "bundle.zip saved" || echo "No bundle.zip found"
-          ls -lh /tmp/tradeedge-out/
-
-  create-release:
-    needs: [build-desktop, build-android]
-    runs-on: self-hosted
-    if: always() && (needs.build-desktop.result == 'success' || needs.build-android.result == 'success')
-    steps:
-      - uses: actions/checkout@v4
-
+      # ── Create Codeberg Release ───────────────────────────────────────
       - name: Install jq
-        run: apt-get update -qq && apt-get install -y jq
+        run: apt-get install -y jq
 
-      - name: List release files
-        run: ls -lh /tmp/tradeedge-out/ || echo "No artifacts in /tmp/tradeedge-out/"
-
-      - name: Create Codeberg Release
+      - name: Create Codeberg Release and upload artifacts
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -179,11 +127,11 @@ jobs:
           else
             TAG="v3.0.0"
           fi
+          echo "Tag: $TAG"
 
-          echo "Creating release for tag: $TAG"
-
-          # Delete any existing release for this tag (idempotent re-runs)
-          EXISTING=$(curl -s "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/tags/$TAG" \
+          # Delete any existing release for this tag
+          EXISTING=$(curl -s \
+            "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/tags/$TAG" \
             -H "Authorization: token $TOKEN" | jq -r '.id // empty')
           if [ -n "$EXISTING" ]; then
             echo "Deleting existing release $EXISTING..."
@@ -192,6 +140,7 @@ jobs:
               -H "Authorization: token $TOKEN"
           fi
 
+          # Create release
           RESP=$(curl -s -X POST \
             "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases" \
             -H "Authorization: token $TOKEN" \
@@ -203,57 +152,35 @@ jobs:
               \"prerelease\": false,
               \"body\": \"## TradeEdge $TAG\n\n### What's New in v3.0.0\n- MarketBrief AI slide deck (Gemini/Groq powered, swipeable slides)\n- Full Research Hub with 13 feature pages\n- Intel Library, Covered Call ETFs, Dividends, Earnings suite, Economic Calendar\n- EPS & Valuation, ETF Flows, P/E Analyzer, Profitability Compare, Technicals\n- Research Hub section in Sidebar\n- Android build improvements\n\n### Downloads\n| Platform | File | Notes |\n|---|---|---|\n| Linux (64-bit) | \`TradeEdge.AppImage\` | \`chmod +x\` then run |\n| Android 7+ | \`TradeEdge.apk\` | Enable 'Install unknown apps', tap to install |\n\n### Quick Start\nBoth apps launch with live market data immediately — no backend required. Add your free FMP key in Settings to unlock all 13 research features.\"
             }")
-
-          echo "Release response: $RESP"
           RELEASE_ID=$(echo "$RESP" | jq -r '.id')
-
           if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
-            echo "ERROR: Failed to create release"
+            echo "ERROR: Failed to create release: $RESP"
             exit 1
           fi
-
           echo "Release ID: $RELEASE_ID"
 
           upload_asset() {
             local FILE="$1"
             local NAME="$2"
             echo "Uploading $NAME ($(du -sh "$FILE" | cut -f1))..."
-            RESP=$(curl -w "\nHTTP_STATUS:%{http_code}" -X POST \
+            HTTP=$(curl -s -o /tmp/upload_resp.json -w "%{http_code}" -X POST \
               "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=$NAME" \
               -H "Authorization: token $TOKEN" \
               -F "attachment=@$FILE")
-            HTTP_STATUS=$(echo "$RESP" | grep "HTTP_STATUS:" | cut -d: -f2)
-            BODY=$(echo "$RESP" | grep -v "HTTP_STATUS:")
-            echo "Response ($HTTP_STATUS): $BODY"
-            if [ "$HTTP_STATUS" != "201" ]; then
-              echo "WARNING: Upload of $NAME may have failed (HTTP $HTTP_STATUS)"
-            else
-              echo "OK: $NAME uploaded successfully"
-            fi
+            echo "HTTP $HTTP: $(cat /tmp/upload_resp.json)"
+            [ "$HTTP" = "201" ] && echo "✓ $NAME uploaded" || echo "✗ $NAME upload failed (HTTP $HTTP)"
           }
 
           # Upload AppImage
-          for f in /tmp/tradeedge-out/*.AppImage; do
-            [ -f "$f" ] || { echo "No AppImage found in /tmp/tradeedge-out/"; continue; }
-            upload_asset "$f" "$(basename "$f")"
+          for f in electron/out/*.AppImage; do
+            [ -f "$f" ] && upload_asset "$f" "$(basename "$f")" || echo "No AppImage found"
           done
 
           # Upload APK
-          if [ -f /tmp/tradeedge-out/TradeEdge.apk ]; then
-            upload_asset /tmp/tradeedge-out/TradeEdge.apk TradeEdge.apk
-          else
-            echo "No APK found in /tmp/tradeedge-out/"
-          fi
+          APK="frontend/android/app/build/outputs/apk/debug/app-debug.apk"
+          [ -f "$APK" ] && upload_asset "$APK" "TradeEdge.apk" || echo "No APK found"
 
           # Upload OTA bundle
-          if [ -f /tmp/tradeedge-out/bundle.zip ]; then
-            upload_asset /tmp/tradeedge-out/bundle.zip bundle.zip
-          else
-            echo "No bundle.zip found in /tmp/tradeedge-out/"
-          fi
+          [ -f bundle.zip ] && upload_asset bundle.zip bundle.zip || echo "No bundle.zip found"
 
           echo "Done: https://codeberg.org/Knight0wl/TradeEdge/releases/tag/$TAG"
-
-      - name: Cleanup artifact directory
-        if: always()
-        run: rm -rf /tmp/tradeedge-out
