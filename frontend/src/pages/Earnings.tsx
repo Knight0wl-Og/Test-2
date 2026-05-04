@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useWatchlistStore } from '../store/watchlistStore';
-import { fetchEarningsCalendarFMP, getFmpKey } from '../services/fmpService';
+import { fetchEarningsCalendarRange, hasFinnhubKey } from '../services/finnhubService';
 import clsx from 'clsx';
 
 function getWeekBounds(offset = 0): { from: string; to: string; label: string } {
@@ -25,24 +25,17 @@ function fmtSurprise(pct: number | null) {
   return (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
 }
 
-function fmtLarge(n: number | null) {
-  if (n == null) return '—';
-  if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-  return `$${n.toFixed(2)}`;
-}
-
 export function Earnings() {
   const navigate = useNavigate();
   const selectSymbol = useWatchlistStore((s) => s.selectSymbol);
   const [weekOffset, setWeekOffset] = useState(0);
   const { from, to, label } = getWeekBounds(weekOffset);
-  const hasFmpKey = !!getFmpKey();
+  const hasKey = hasFinnhubKey();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['earnings-calendar', from, to],
-    queryFn: () => fetchEarningsCalendarFMP(from, to),
-    enabled: hasFmpKey,
+    queryKey: ['earnings-calendar-fh', from, to],
+    queryFn: () => fetchEarningsCalendarRange(from, to),
+    enabled: hasKey,
     staleTime: 30 * 60 * 1000,
   });
 
@@ -75,11 +68,11 @@ export function Earnings() {
         </button>
       </div>
 
-      {!hasFmpKey && (
+      {!hasKey && (
         <div className="bg-amber-900/30 border border-amber-700/40 rounded-lg p-4 text-center">
-          <p className="text-sm text-amber-300 mb-1">FMP API Key Required</p>
+          <p className="text-sm text-amber-300 mb-1">Finnhub API Key Required</p>
           <p className="text-xs text-text-muted">
-            Add your free FMP key in Settings — get one at financialmodelingprep.com
+            Add your free Finnhub key in Settings — get one at finnhub.io
           </p>
         </div>
       )}
@@ -114,12 +107,14 @@ export function Earnings() {
 
           <div className="space-y-1">
             {data.map((e, i) => {
-              const surprise = fmtSurprise(e.eps != null && e.epsEstimated != null
-                ? ((e.eps - e.epsEstimated) / Math.abs(e.epsEstimated)) * 100
-                : null);
-              const beat = e.eps != null && e.epsEstimated != null && e.eps > e.epsEstimated;
-              const miss = e.eps != null && e.epsEstimated != null && e.eps < e.epsEstimated;
-              const pending = e.eps == null;
+              const surprise = fmtSurprise(
+                e.epsActual != null && e.epsEstimate != null && e.epsEstimate !== 0
+                  ? ((e.epsActual - e.epsEstimate) / Math.abs(e.epsEstimate)) * 100
+                  : null
+              );
+              const beat = e.epsActual != null && e.epsEstimate != null && e.epsActual > e.epsEstimate;
+              const miss = e.epsActual != null && e.epsEstimate != null && e.epsActual < e.epsEstimate;
+              const pending = e.epsActual == null;
 
               return (
                 <button
@@ -130,14 +125,14 @@ export function Earnings() {
                   <div>
                     <p className="text-xs font-semibold text-white">{e.symbol}</p>
                     <p className="text-[10px] text-text-muted">
-                      {e.time === 'bmo' ? 'Pre-market' : e.time === 'amc' ? 'After-close' : '—'}
+                      {e.hour === 'bmo' ? 'Pre-market' : e.hour === 'amc' ? 'After-close' : '—'}
                     </p>
                   </div>
                   <span className="text-xs text-gray-400 font-mono">
                     {new Date(e.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </span>
                   <span className="text-xs text-gray-300 font-mono text-right">
-                    {e.epsEstimated != null ? `$${e.epsEstimated.toFixed(2)}` : '—'}
+                    {e.epsEstimate != null ? `$${e.epsEstimate.toFixed(2)}` : '—'}
                   </span>
                   <span className={clsx(
                     'text-xs font-mono text-right w-14',

@@ -37,6 +37,34 @@ async function fhGet(path: string): Promise<unknown> {
   return res.json();
 }
 
+export interface EarningsCalendarEntry {
+  date: string;
+  symbol: string;
+  epsEstimate: number | null;
+  epsActual: number | null;
+  revenueEstimate: number | null;
+  revenueActual: number | null;
+  hour: string; // 'amc' | 'bmo' | 'dmh'
+}
+
+/** All companies reporting earnings in a date range (no symbol filter) */
+export async function fetchEarningsCalendarRange(from: string, to: string): Promise<EarningsCalendarEntry[]> {
+  const data = await fhGet(`/calendar/earnings?from=${from}&to=${to}`);
+  const rows: Record<string, unknown>[] = (data as any)?.earningsCalendar ?? [];
+  return rows
+    .filter((r) => r.date && r.symbol)
+    .map((r) => ({
+      date: r.date as string,
+      symbol: r.symbol as string,
+      epsEstimate: (r.epsEstimate as number | null) ?? null,
+      epsActual: (r.epsActual as number | null) ?? null,
+      revenueEstimate: (r.revenueEstimate as number | null) ?? null,
+      revenueActual: (r.revenueActual as number | null) ?? null,
+      hour: (r.hour as string) ?? '',
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 /** Past + upcoming earnings for symbol (last 4 + next 2 quarters) */
 export async function fetchEarningsCalendar(symbol: string): Promise<EarningsDate[]> {
   const now = new Date();

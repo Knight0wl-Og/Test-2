@@ -20,6 +20,9 @@ async function fmpFetch<T>(path: string, params: Record<string, string> = {}): P
   if (Capacitor.isNativePlatform()) {
     const searchParams = new URLSearchParams({ ...params, apikey: key });
     const res = await CapacitorHttp.get({ url: `${FMP_BASE}/${path}?${searchParams}` });
+    if (res.status === 401) throw new Error('Invalid FMP API key — check Settings');
+    if (res.status === 403) throw new Error('This feature requires a paid FMP plan (free tier does not include this endpoint)');
+    if (res.status === 429) throw new Error('FMP rate limit reached — try again in a minute');
     if (res.status !== 200) throw new Error(`FMP error ${res.status}`);
     return res.data as T;
   }
@@ -30,6 +33,9 @@ async function fmpFetch<T>(path: string, params: Record<string, string> = {}): P
   const res = await fetch(url, {
     headers: { 'x-fmp-key': key },
   });
+  if (res.status === 401) throw new Error('Invalid FMP API key — check Settings');
+  if (res.status === 403) throw new Error('This feature requires a paid FMP plan (free tier does not include this endpoint)');
+  if (res.status === 429) throw new Error('FMP rate limit reached — try again in a minute');
   if (!res.ok) throw new Error(`FMP proxy error ${res.status}`);
   return res.json();
 }

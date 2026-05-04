@@ -139,9 +139,13 @@ ${schema}`;
     throw new Error('No AI key configured — add a Gemini or Groq key in Settings to generate the brief.');
   }
 
-  // Extract JSON array from response
-  const match = raw.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error('AI returned unexpected format');
+  // Strip markdown code fences if the model wrapped the JSON
+  const stripped = raw.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/m, '').trim();
+  const match = stripped.match(/\[[\s\S]*\]/);
+  if (!match) {
+    const preview = raw.slice(0, 120).replace(/\n/g, ' ');
+    throw new Error(`AI returned unexpected format: "${preview}"`);
+  }
   return JSON.parse(match[0]) as BriefSlide[];
 }
 
