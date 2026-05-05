@@ -1,6 +1,6 @@
 {
   "name": "tradeedge-electron",
-  "version": "3.0.0",
+  "version": "3.5.0",
   "private": true,
   "main": "src/main.js",
   "scripts": {
@@ -11,6 +11,7 @@
     "build": "electron-builder"
   },
   "dependencies": {
+    "electron-store": "^11.0.2",
     "electron-updater": "^6.3.9"
   },
   "devDependencies": {
@@ -38,24 +39,32 @@
       {
         "from": "../frontend/dist",
         "to": "frontend/dist",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "../backend/dist",
         "to": "backend/dist",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "../backend/node_modules",
         "to": "backend/node_modules",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "publisherName": "TradeEdge"

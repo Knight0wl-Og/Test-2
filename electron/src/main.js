@@ -1,7 +1,44 @@
-const { app, BrowserWindow, shell, dialog } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
+
+// ── Persistent key storage (electron-store) ───────────────────────────────────
+let store = null;
+function getStore() {
+  if (!store) {
+    try {
+      const Store = require('electron-store');
+      store = new Store({ name: 'tradeedge-keys', encryptionKey: 'te-keys-v1' });
+    } catch (e) {
+      console.warn('[store] electron-store unavailable, keys will not persist:', e.message);
+    }
+  }
+  return store;
+}
+
+function setupKeyIPC() {
+  ipcMain.handle('key:get', (_e, name) => {
+    const s = getStore();
+    return s ? (s.get(name, '') || '') : '';
+  });
+  ipcMain.handle('key:set', (_e, name, value) => {
+    const s = getStore();
+    if (s) s.set(name, value);
+  });
+  ipcMain.handle('key:delete', (_e, name) => {
+    const s = getStore();
+    if (s) s.delete(name);
+  });
+  ipcMain.handle('key:clear', () => {
+    const s = getStore();
+    if (s) s.clear();
+  });
+  ipcMain.handle('key:getAll', () => {
+    const s = getStore();
+    return s ? s.store : {};
+  });
+}
 
 const isDev = process.env.NODE_ENV !== 'production';
 const resourcesPath = process.resourcesPath;
@@ -83,7 +120,11 @@ async function createWindow() {
     minHeight: 640,
     backgroundColor: '#0a0a0f',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    webPreferences: { nodeIntegration: false, contextIsolation: true },
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
     show: false,
     title: 'TradeEdge — Starting...',
   });
@@ -114,6 +155,7 @@ async function createWindow() {
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  setupKeyIPC();
   createWindow();
   initAutoUpdater();
 });

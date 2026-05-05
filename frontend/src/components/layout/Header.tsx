@@ -8,7 +8,8 @@ import { Capacitor } from '@capacitor/core';
 import { checkAndDownload, applyUpdate, type UpdateProgress } from '../../services/liveUpdate';
 import { loadAlerts, removeAlert, type PriceAlert } from '../../services/alertsService';
 import { AddAlertModal } from '../common/AddAlertModal';
-import { getFmpKey, setFmpKey } from '../../services/fmpService';
+import { getFmpKey } from '../../services/fmpService';
+import { setKey } from '../../services/keyStorage';
 import clsx from 'clsx';
 
 interface HeaderProps {
@@ -177,24 +178,22 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [schwabClientSecret, setSchwabClientSecret] = useState(localStorage.getItem('TRADEEDGE_SCHWAB_CLIENT_SECRET') || '');
   const [schwabConnected, setSchwabConnected] = useState(!!localStorage.getItem('SCHWAB_ACCESS_TOKEN'));
   const [schwabConnecting, setSchwabConnecting] = useState(false);
+  const [watermark, setWatermark] = useState(localStorage.getItem('tradeedge_watermark') || 'TradeEdge');
 
-  function save() {
-    localStorage.setItem('TRADEEDGE_API_URL', url.trim());
-    setFmpKey(fmpKey);
-    if (anthropicKey.trim()) localStorage.setItem('TRADEEDGE_ANTHROPIC_KEY', anthropicKey.trim());
-    else localStorage.removeItem('TRADEEDGE_ANTHROPIC_KEY');
-    if (finnhubKey.trim()) localStorage.setItem('TRADEEDGE_FINNHUB_KEY', finnhubKey.trim());
-    else localStorage.removeItem('TRADEEDGE_FINNHUB_KEY');
-    if (polygonKey.trim()) localStorage.setItem('TRADEEDGE_POLYGON_KEY', polygonKey.trim());
-    else localStorage.removeItem('TRADEEDGE_POLYGON_KEY');
-    if (geminiKey.trim()) localStorage.setItem('TRADEEDGE_GEMINI_KEY', geminiKey.trim());
-    else localStorage.removeItem('TRADEEDGE_GEMINI_KEY');
-    if (groqKey.trim()) localStorage.setItem('TRADEEDGE_GROQ_KEY', groqKey.trim());
-    else localStorage.removeItem('TRADEEDGE_GROQ_KEY');
-    if (schwabClientId.trim()) localStorage.setItem('TRADEEDGE_SCHWAB_CLIENT_ID', schwabClientId.trim());
-    else localStorage.removeItem('TRADEEDGE_SCHWAB_CLIENT_ID');
-    if (schwabClientSecret.trim()) localStorage.setItem('TRADEEDGE_SCHWAB_CLIENT_SECRET', schwabClientSecret.trim());
-    else localStorage.removeItem('TRADEEDGE_SCHWAB_CLIENT_SECRET');
+  async function save() {
+    // Write each key via keyStorage (mirrors to localStorage + electron-store/preferences)
+    await Promise.all([
+      setKey('TRADEEDGE_API_URL', url.trim()),
+      setKey('tradeedge_fmp_key', fmpKey.trim()),
+      setKey('TRADEEDGE_ANTHROPIC_KEY', anthropicKey.trim()),
+      setKey('TRADEEDGE_FINNHUB_KEY', finnhubKey.trim()),
+      setKey('TRADEEDGE_POLYGON_KEY', polygonKey.trim()),
+      setKey('TRADEEDGE_GEMINI_KEY', geminiKey.trim()),
+      setKey('TRADEEDGE_GROQ_KEY', groqKey.trim()),
+      setKey('TRADEEDGE_SCHWAB_CLIENT_ID', schwabClientId.trim()),
+      setKey('TRADEEDGE_SCHWAB_CLIENT_SECRET', schwabClientSecret.trim()),
+      setKey('tradeedge_watermark', watermark.trim() || 'TradeEdge'),
+    ]);
     window.location.reload();
   }
 
@@ -339,6 +338,22 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           <input type="password" value={polygonKey} onChange={(e) => setPolygonKey(e.target.value)} placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
         </div>
 
+        {/* Watermark */}
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-xs font-medium text-gray-300">Export Watermark</span>
+            <span className="text-[10px] text-text-muted">(shown on Earnings Visualizer exports)</span>
+          </div>
+          <input
+            type="text"
+            value={watermark}
+            onChange={(e) => setWatermark(e.target.value)}
+            placeholder="TradeEdge"
+            maxLength={40}
+            className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent"
+          />
+        </div>
+
         <div className="flex gap-2 mb-2">
           <button onClick={save} className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent-hover text-white rounded py-2 text-sm font-medium transition-colors">
             <Check className="w-4 h-4" />Save & Reload
@@ -354,7 +369,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             Reset watchlists to defaults
           </button>
         </div>
-        <p className="text-xs text-text-muted/50 mt-4 text-center">TradeEdge v1.5.0</p>
+        <p className="text-xs text-text-muted/50 mt-4 text-center">TradeEdge v3.5.0</p>
       </div>
     </div>
   );

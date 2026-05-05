@@ -4,6 +4,7 @@ import './index.css';
 import App from './App';
 import { confirmBundle } from './services/liveUpdate';
 import { syncEarningsWatchlist } from './services/earningsSync';
+import { migrateLocalStorageKeys, restoreKeysToLocalStorage } from './services/keyStorage';
 import { Capacitor } from '@capacitor/core';
 
 // Confirm the running bundle is stable (prevents auto-rollback on crash)
@@ -22,14 +23,23 @@ if (Capacitor.isNativePlatform()) {
   })();
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+// Bootstrap: migrate existing localStorage keys → persistent store (first run),
+// then restore persisted keys → localStorage (post-reinstall recovery).
+// Render AFTER so synchronous key readers (getFmpKey etc.) always see values.
+async function bootstrap() {
+  await migrateLocalStorageKeys();
+  await restoreKeysToLocalStorage();
+}
 
-// Sync earnings calendar into the watchlist 2s after mount (non-blocking)
-setTimeout(syncEarningsWatchlist, 2000);
+bootstrap().then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  );
+  // Sync earnings calendar into the watchlist 2s after mount (non-blocking)
+  setTimeout(syncEarningsWatchlist, 2000);
+});
 
 // Handle Schwab OAuth redirect: tradeedge://oauth/callback?code=...
 if (Capacitor.isNativePlatform()) {

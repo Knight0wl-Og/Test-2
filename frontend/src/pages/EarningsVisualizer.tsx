@@ -1,205 +1,179 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PieChart } from 'lucide-react';
+import { Download, ImageIcon } from 'lucide-react';
 import { useWatchlistStore } from '../store/watchlistStore';
-import { fetchIncomeStatementFMP, getFmpKey } from '../services/fmpService';
-import clsx from 'clsx';
+import {
+  fetchIncomeStatementFMP,
+  fetchCashFlowStatementFMP,
+  getFmpKey,
+} from '../services/fmpService';
+import { IncomeFlowDiagram } from '../components/earnings-visualizer/IncomeFlowDiagram';
+import { CashFlowDiagram } from '../components/earnings-visualizer/CashFlowDiagram';
+import { EarningsStatCards } from '../components/earnings-visualizer/StatCards';
 
-type Period = 'quarter' | 'annual';
-
-function fmtLarge(n: number): string {
-  if (Math.abs(n) >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
-  if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-  return `$${n.toFixed(0)}`;
+function getWatermark(): string {
+  return localStorage.getItem('tradeedge_watermark') || 'TradeEdge';
 }
 
-function MiniChart({
-  data,
-  color,
-  label,
-}: {
-  data: { label: string; value: number }[];
-  color: string;
-  label: string;
-}) {
-  const values = data.map((d) => d.value);
-  const min = Math.min(...values, 0);
-  const max = Math.max(...values, 1);
-  const range = max - min || 1;
-  const normalize = (v: number) => ((v - min) / range) * 100;
+async function exportSvg(el: SVGSVGElement | null, filename: string) {
+  if (!el) return;
+  const serializer = new XMLSerializer();
+  const svgStr = serializer.serializeToString(el);
+  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
 
-  return (
-    <div className="bg-bg-card border border-border-dim rounded-lg p-3 mb-3">
-      <p className="text-[10px] text-text-muted uppercase tracking-wider mb-2">{label}</p>
-      <div className="flex items-end gap-1 h-16">
-        {data.map((d, i) => {
-          const pct = normalize(d.value);
-          const isNeg = d.value < 0;
-          return (
-            <div key={i} className="flex-1 flex flex-col items-center justify-end h-full gap-0.5">
-              <div
-                className={clsx('rounded-sm w-full transition-all', isNeg ? 'bg-red-400/70' : color)}
-                style={{ height: `${Math.max(pct, 3)}%` }}
-                title={`${d.label}: ${fmtLarge(d.value)}`}
-              />
-            </div>
-          );
-        })}
-      </div>
-      {/* X labels — show every other one to avoid crowding */}
-      <div className="flex gap-1 mt-1">
-        {data.map((d, i) => (
-          <div key={i} className="flex-1 text-center">
-            {i % 2 === 0 && <span className="text-[8px] text-text-muted/60 font-mono">{d.label}</span>}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+async function exportPng(el: SVGSVGElement | null, filename: string, w = 1920, h = 1100) {
+  if (!el) return;
+  const serializer = new XMLSerializer();
+  const svgStr = serializer.serializeToString(el);
+  const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#f0f0e8';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename; a.click();
+    }, 'image/png');
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
 }
 
 export function EarningsVisualizer() {
   const storeSymbol = useWatchlistStore((s) => s.selectedSymbol);
-  const [input, setInput] = useState(storeSymbol ?? 'AAPL');
-  const [symbol, setSymbol] = useState(storeSymbol ?? 'AAPL');
-  const [period, setPeriod] = useState<Period>('quarter');
+  const [input, setInput] = useState(storeSymbol ?? 'NVDA');
+  const [symbol, setSymbol] = useState(storeSymbol ?? 'NVDA');
+  const [period, setPeriod] = useState<'quarter' | 'annual'>('quarter');
   const hasFmpKey = !!getFmpKey();
+  const watermark = getWatermark();
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['income-statement', symbol, period],
-    queryFn: () => fetchIncomeStatementFMP(symbol, period, period === 'quarter' ? 12 : 5),
+  const incomeRef = useRef<SVGSVGElement>(null);
+  const cashRef   = useRef<SVGSVGElement>(null);
+
+  const { data: incomeData = [], isLoading: incomeLoading } = useQuery({
+    queryKey: ['ev-income', symbol, period],
+    queryFn: () => fetchIncomeStatementFMP(symbol, period, 2),
     enabled: hasFmpKey && !!symbol,
-    staleTime: 30 * 60 * 1000,
+    staleTime: 30 * 60_000,
   });
 
-  const statements = [...(data ?? [])].reverse(); // oldest first
+  const { data: cashData = [], isLoading: cashLoading } = useQuery({
+    queryKey: ['ev-cashflow', symbol, period],
+    queryFn: () => fetchCashFlowStatementFMP(symbol, period, 2),
+    enabled: hasFmpKey && !!symbol,
+    staleTime: 30 * 60_000,
+  });
 
-  // Format label from date
-  const lbl = (date: string) => {
-    const d = new Date(date + 'T12:00:00');
-    return period === 'quarter'
-      ? d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-      : d.getFullYear().toString();
-  };
+  const isLoading = incomeLoading || cashLoading;
+  const income = incomeData[0] ?? null;
+  const incomePrev = incomeData[1] ?? null;
+  const cash   = cashData[0] ?? null;
+  const cashPrev = cashData[1] ?? null;
 
-  const revenueData = statements.map((s) => ({ label: lbl(s.date), value: s.revenue }));
-  const netIncomeData = statements.map((s) => ({ label: lbl(s.date), value: s.netIncome }));
-  const epsData = statements.map((s) => ({ label: lbl(s.date), value: s.epsDiluted }));
+  function handleGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    setSymbol(input.trim().toUpperCase());
+  }
 
-  // YoY growth
-  const latest = statements[statements.length - 1];
-  const yearAgo = statements[statements.length - 5]; // ~4 quarters back
-  const revGrowth = latest && yearAgo && yearAgo.revenue
-    ? ((latest.revenue - yearAgo.revenue) / Math.abs(yearAgo.revenue)) * 100
-    : null;
-  const epsGrowth = latest && yearAgo && yearAgo.epsDiluted
-    ? ((latest.epsDiluted - yearAgo.epsDiluted) / Math.abs(yearAgo.epsDiluted)) * 100
-    : null;
+  const safeFilename = useCallback((suffix: string) =>
+    `${symbol}-${period === 'quarter' ? 'Q' : 'A'}-${suffix}`, [symbol, period]);
 
   return (
-    <div className="p-4 min-h-full bg-bg-primary">
-      <div className="flex items-center gap-2 mb-4">
-        <PieChart className="w-4 h-4 text-cyan-400 shrink-0" />
-        <h1 className="text-sm font-bold text-white">Earnings Visualizer</h1>
+    <div className="p-4 min-h-full bg-bg-primary space-y-4">
+      <div>
+        <h1 className="text-base font-bold text-white">Earnings Visualizer</h1>
+        <p className="text-xs text-text-muted">Publication-quality income &amp; cash flow diagrams</p>
       </div>
 
-      {/* Controls */}
-      <form
-        onSubmit={(e) => { e.preventDefault(); setSymbol(input.trim().toUpperCase()); }}
-        className="flex gap-2 mb-3"
-      >
+      <form onSubmit={handleGenerate} className="flex gap-2 items-center flex-wrap">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value.toUpperCase())}
-          maxLength={6}
-          placeholder="Symbol"
-          className="flex-1 bg-bg-card border border-border-dim rounded-lg px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono"
+          placeholder="Ticker (e.g. NVDA)"
+          className="flex-1 min-w-[140px] bg-bg-card border border-border-dim rounded-lg px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent"
         />
+        <select
+          value={period}
+          onChange={(e) => setPeriod(e.target.value as 'quarter' | 'annual')}
+          className="bg-bg-card border border-border-dim rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+        >
+          <option value="quarter">Latest Quarter</option>
+          <option value="annual">Latest Annual</option>
+        </select>
         <button
           type="submit"
-          className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors"
+          className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-lg text-sm transition-colors"
         >
-          Load
+          Generate
         </button>
       </form>
 
-      {/* Period toggle */}
-      <div className="flex gap-1 mb-4">
-        {(['quarter', 'annual'] as Period[]).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={clsx(
-              'flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors',
-              period === p ? 'bg-accent text-white' : 'bg-bg-card text-text-muted hover:text-white border border-border-dim'
-            )}
-          >
-            {p === 'quarter' ? 'Quarterly' : 'Annual'}
-          </button>
-        ))}
-      </div>
-
       {!hasFmpKey && (
-        <div className="bg-amber-900/30 border border-amber-700/40 rounded-lg p-4 text-center">
-          <p className="text-sm text-amber-300 mb-1">FMP API Key Required</p>
-          <p className="text-xs text-text-muted">Add your free FMP key in Settings</p>
+        <div className="bg-amber-900/30 border border-amber-700/40 rounded-lg p-4 text-sm text-amber-300">
+          FMP API key required — add it in Settings
         </div>
       )}
 
       {isLoading && (
         <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-24 bg-bg-card rounded animate-pulse" />
-          ))}
+          <div className="h-72 bg-bg-card rounded-xl animate-pulse" />
+          <div className="h-20 bg-bg-card rounded-xl animate-pulse" />
+          <div className="h-64 bg-bg-card rounded-xl animate-pulse" />
         </div>
       )}
 
-      {error && (
-        <div className="bg-red-900/30 border border-red-700/40 rounded-lg p-4 text-sm text-red-300">
-          {error instanceof Error ? error.message : 'Failed to load'}
-        </div>
-      )}
-
-      {statements.length > 0 && (
+      {!isLoading && income && (
         <>
-          {/* Key stats */}
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            <div className="bg-bg-card border border-border-dim rounded-lg p-3 text-center">
-              <p className="text-[10px] text-text-muted mb-1">Revenue Growth</p>
-              <p className={clsx(
-                'text-base font-bold',
-                revGrowth == null ? 'text-text-muted' : revGrowth >= 0 ? 'text-green' : 'text-red-400'
-              )}>
-                {revGrowth != null ? `${revGrowth >= 0 ? '+' : ''}${revGrowth.toFixed(1)}%` : '—'}
-              </p>
-              <p className="text-[9px] text-text-muted mt-0.5">YoY</p>
-            </div>
-            <div className="bg-bg-card border border-border-dim rounded-lg p-3 text-center">
-              <p className="text-[10px] text-text-muted mb-1">EPS Growth</p>
-              <p className={clsx(
-                'text-base font-bold',
-                epsGrowth == null ? 'text-text-muted' : epsGrowth >= 0 ? 'text-green' : 'text-red-400'
-              )}>
-                {epsGrowth != null ? `${epsGrowth >= 0 ? '+' : ''}${epsGrowth.toFixed(1)}%` : '—'}
-              </p>
-              <p className="text-[9px] text-text-muted mt-0.5">YoY</p>
-            </div>
-            <div className="bg-bg-card border border-border-dim rounded-lg p-3 text-center">
-              <p className="text-[10px] text-text-muted mb-1">Net Margin</p>
-              <p className={clsx(
-                'text-base font-bold',
-                latest == null ? 'text-text-muted' : latest.netIncomeRatio >= 0 ? 'text-accent' : 'text-red-400'
-              )}>
-                {latest ? `${(latest.netIncomeRatio * 100).toFixed(1)}%` : '—'}
-              </p>
-              <p className="text-[9px] text-text-muted mt-0.5">Latest</p>
-            </div>
+          <div className="rounded-xl overflow-hidden">
+            <IncomeFlowDiagram ref={incomeRef} data={income} prev={incomePrev} watermark={watermark} />
           </div>
 
-          <MiniChart data={revenueData} color="bg-accent/70" label="Revenue" />
-          <MiniChart data={netIncomeData} color="bg-green/70" label="Net Income" />
-          <MiniChart data={epsData} color="bg-purple/70" label="EPS (Diluted)" />
+          <EarningsStatCards
+            current={{ revenue: income.revenue, grossProfit: income.grossProfit, operatingIncome: income.operatingIncome, netIncome: income.netIncome, epsDiluted: income.epsDiluted }}
+            previous={incomePrev ? { revenue: incomePrev.revenue, grossProfit: incomePrev.grossProfit, operatingIncome: incomePrev.operatingIncome, netIncome: incomePrev.netIncome, epsDiluted: incomePrev.epsDiluted } : null}
+          />
+
+          <div className="flex gap-2">
+            <button onClick={() => exportPng(incomeRef.current, safeFilename('income.png'))}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#1e2448] hover:bg-[#252d5e] border border-[#2a3470] rounded-lg text-sm text-white font-medium transition-colors">
+              <ImageIcon className="w-4 h-4" /> Export PNG (1920×1100)
+            </button>
+            <button onClick={() => exportSvg(incomeRef.current, safeFilename('income.svg'))}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#1e2448] hover:bg-[#252d5e] border border-[#2a3470] rounded-lg text-sm text-white font-medium transition-colors">
+              <Download className="w-4 h-4" /> Export SVG
+            </button>
+          </div>
+        </>
+      )}
+
+      {!isLoading && cash && (
+        <>
+          <div className="rounded-xl overflow-hidden mt-2">
+            <CashFlowDiagram ref={cashRef} data={cash} prev={cashPrev} watermark={watermark} />
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={() => exportPng(cashRef.current, safeFilename('cashflow.png'))}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#1e2448] hover:bg-[#252d5e] border border-[#2a3470] rounded-lg text-sm text-white font-medium transition-colors">
+              <ImageIcon className="w-4 h-4" /> Export PNG (1920×1100)
+            </button>
+            <button onClick={() => exportSvg(cashRef.current, safeFilename('cashflow.svg'))}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#1e2448] hover:bg-[#252d5e] border border-[#2a3470] rounded-lg text-sm text-white font-medium transition-colors">
+              <Download className="w-4 h-4" /> Export SVG
+            </button>
+          </div>
         </>
       )}
     </div>

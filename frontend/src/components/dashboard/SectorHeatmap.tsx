@@ -60,7 +60,7 @@ function SkeletonCell() {
   );
 }
 
-export function SectorHeatmap() {
+export function SectorHeatmap({ compact }: { compact?: boolean } = {}) {
   const { data: sectors, isLoading } = useSectors();
   const { selectedSymbol, selectSymbol } = useWatchlistStore();
 

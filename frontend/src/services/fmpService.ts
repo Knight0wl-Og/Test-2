@@ -236,6 +236,53 @@ export async function fetchEtfHoldersFMP(etfSymbol: string): Promise<FMPEtfHolde
   return fmpFetch(`v4/etf-holder/${encodeURIComponent(etfSymbol)}`);
 }
 
+// ─── Cash Flow Statement ─────────────────────────────────────────────────────
+
+export interface FMPCashFlowStatement {
+  date: string;
+  symbol: string;
+  period: string;
+  operatingCashFlow: number;
+  capitalExpenditure: number;
+  freeCashFlow: number;
+  commonStockRepurchased: number;
+  netIncome: number;
+  dividendsPaid: number;
+}
+
+export async function fetchCashFlowStatementFMP(
+  symbol: string,
+  period: 'quarter' | 'annual' = 'quarter',
+  limit = 4
+): Promise<FMPCashFlowStatement[]> {
+  return fmpFetch(`v3/cash-flow-statement/${encodeURIComponent(symbol)}`, {
+    period,
+    limit: String(limit),
+  });
+}
+
+// ─── Price Target ────────────────────────────────────────────────────────────
+
+export interface FMPPriceTargetConsensus {
+  symbol: string;
+  targetHigh: number | null;
+  targetLow: number | null;
+  targetConsensus: number | null;
+  targetMedian: number | null;
+}
+
+/** Returns null on 403/error so callers can silently degrade */
+export async function fetchPriceTargetConsensusFMP(
+  symbol: string
+): Promise<FMPPriceTargetConsensus | null> {
+  try {
+    const data = await fmpFetch<FMPPriceTargetConsensus[]>(`v4/price-target-consensus`, { symbol });
+    return Array.isArray(data) && data.length ? data[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Technicals ───────────────────────────────────────────────────────────────
 
 export async function fetchTechnicalIndicatorFMP(
