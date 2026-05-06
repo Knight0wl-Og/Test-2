@@ -64,12 +64,20 @@ async function getPreferences() {
 
 export async function getKey(name: string): Promise<string> {
   if (isElectron()) {
-    return (await window.electronAPI!.getKey(name)) ?? '';
+    try {
+      return (await window.electronAPI!.getKey(name)) ?? '';
+    } catch {
+      return localStorage.getItem(name) ?? '';
+    }
   }
   if (isNativeAndroid()) {
-    const Preferences = await getPreferences();
-    const { value } = await Preferences.get({ key: name });
-    return value ?? '';
+    try {
+      const Preferences = await getPreferences();
+      const { value } = await Preferences.get({ key: name });
+      return value ?? localStorage.getItem(name) ?? '';
+    } catch {
+      return localStorage.getItem(name) ?? '';
+    }
   }
   return localStorage.getItem(name) ?? '';
 }
@@ -132,17 +140,20 @@ export async function migrateLocalStorageKeys(): Promise<void> {
   if (!isElectron() && !isNativeAndroid()) return; // nothing to migrate on web
   if (localStorage.getItem(MIGRATION_FLAG)) return; // already done
 
-  for (const name of KEY_NAMES) {
-    const existing = localStorage.getItem(name);
-    if (existing) {
-      const stored = await getKey(name);
-      if (!stored) {
-        await setKey(name, existing);
+  try {
+    for (const name of KEY_NAMES) {
+      const existing = localStorage.getItem(name);
+      if (existing) {
+        const stored = await getKey(name);
+        if (!stored) {
+          await setKey(name, existing);
+        }
       }
     }
+    localStorage.setItem(MIGRATION_FLAG, '1');
+  } catch (e) {
+    console.warn('[keyStorage] migration error (non-fatal):', e);
   }
-
-  localStorage.setItem(MIGRATION_FLAG, '1');
 }
 
 // ─── Sync helpers (for components that still use synchronous patterns) ────────
@@ -169,8 +180,12 @@ export async function loadAllKeys(): Promise<Record<string, string>> {
  */
 export async function restoreKeysToLocalStorage(): Promise<void> {
   if (!isElectron() && !isNativeAndroid()) return;
-  const keys = await loadAllKeys();
-  for (const [name, value] of Object.entries(keys)) {
-    if (value) localStorage.setItem(name, value);
+  try {
+    const keys = await loadAllKeys();
+    for (const [name, value] of Object.entries(keys)) {
+      if (value) localStorage.setItem(name, value);
+    }
+  } catch (e) {
+    console.warn('[keyStorage] restore error (non-fatal):', e);
   }
 }

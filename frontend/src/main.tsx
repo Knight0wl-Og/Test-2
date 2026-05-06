@@ -25,10 +25,14 @@ if (Capacitor.isNativePlatform()) {
 
 // Bootstrap: migrate existing localStorage keys → persistent store (first run),
 // then restore persisted keys → localStorage (post-reinstall recovery).
-// Render AFTER so synchronous key readers (getFmpKey etc.) always see values.
+// ALWAYS resolves — key persistence is non-fatal, app must render regardless.
 async function bootstrap() {
-  await migrateLocalStorageKeys();
-  await restoreKeysToLocalStorage();
+  try {
+    await migrateLocalStorageKeys();
+    await restoreKeysToLocalStorage();
+  } catch (e) {
+    console.warn('[TradeEdge] Key bootstrap failed (non-fatal):', e);
+  }
 }
 
 bootstrap().then(() => {
