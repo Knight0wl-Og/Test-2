@@ -18,12 +18,12 @@ export type Timeframe = '5m' | '15m' | '30m' | '1h' | '4h' | '1d' | '1w';
 type ChartType = 'candle' | 'bar' | 'line';
 
 interface IndicatorState {
-  vwap: boolean;
-  pdhl: boolean;   // Previous Day H/L/C
-  pivots: boolean;
-  ob: boolean;     // Order Blocks
-  fvg: boolean;    // Fair Value Gaps
+  sma20:  boolean;
+  sma50:  boolean;
+  sma100: boolean;
+  sma200: boolean;
   volume: boolean;
+  rsi:    boolean;
 }
 
 interface OHLCTooltip {
@@ -40,8 +40,8 @@ interface OHLCTooltip {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const TIMEFRAME_CONFIG: Record<Timeframe, { period: string; interval: string; isIntraday: boolean }> = {
-  '5m':  { period: '1mo',  interval: '5m',  isIntraday: true  },  // YF max ~60d for 5m
-  '15m': { period: '1mo',  interval: '15m', isIntraday: true  },  // YF max ~60d for 15m
+  '5m':  { period: '1mo',  interval: '5m',  isIntraday: true  },
+  '15m': { period: '1mo',  interval: '15m', isIntraday: true  },
   '30m': { period: '3mo',  interval: '30m', isIntraday: true  },
   '1h':  { period: '2y',   interval: '60m', isIntraday: true  },
   '4h':  { period: '2y',   interval: '60m', isIntraday: false },
@@ -57,24 +57,22 @@ const COLORS = {
   upCandle: '#26a69a',
   downCandle: '#ef5350',
   volume: { up: 'rgba(38,166,154,0.25)', down: 'rgba(239,83,80,0.25)' },
-  vwap: '#f59e0b',
-  pdh: '#22c55e',
-  pdl: '#ef4444',
-  pdc: '#94a3b8',
-  pp: '#a78bfa',
-  pivot: '#6366f1',
-  obBull: '#22c55e',
-  obBear: '#ef4444',
-  fvgBull: 'rgba(34,197,94,0.15)',
-  fvgBear: 'rgba(239,68,68,0.15)',
+  sma20:  '#3b82f6',   // blue   — fast (20-day)
+  sma50:  '#22c55e',   // green  — medium (50-day)
+  sma100: '#f97316',   // orange — medium-slow (100-day)
+  sma200: '#ef4444',   // red    — slow / institutional (200-day)
+  rsi:    '#a78bfa',   // purple
 };
+
+// Main-chart bottom margin varies with RSI sub-panel
+const MARGINS_RSI_ON  = { top: 0.08, bottom: 0.42 } as const;
+const MARGINS_RSI_OFF = { top: 0.08, bottom: 0.22 } as const;
 
 // ─── Utility: 4H aggregation ─────────────────────────────────────────────────
 
 function aggregate4h(bars: OHLCVBar[]): OHLCVBar[] {
   const buckets = new Map<number, OHLCVBar[]>();
   for (const bar of bars) {
-    // Snap to 4-hour UTC bucket
     const snap = bar.time - (bar.time % (4 * 3600));
     if (!buckets.has(snap)) buckets.set(snap, []);
     buckets.get(snap)!.push(bar);
@@ -83,88 +81,59 @@ function aggregate4h(bars: OHLCVBar[]): OHLCVBar[] {
     .sort(([a], [b]) => a - b)
     .map(([time, grp]) => ({
       time,
-      open: grp[0].open,
-      high: Math.max(...grp.map((b) => b.high)),
-      low: Math.min(...grp.map((b) => b.low)),
-      close: grp[grp.length - 1].close,
+      open:   grp[0].open,
+      high:   Math.max(...grp.map((b) => b.high)),
+      low:    Math.min(...grp.map((b) => b.low)),
+      close:  grp[grp.length - 1].close,
       volume: grp.reduce((s, b) => s + b.volume, 0),
     }));
 }
 
-// ─── Utility: VWAP (resets each trading day) ─────────────────────────────────
+// ─── Utility: Simple Moving Average (rolling sum, O(n)) ──────────────────────
 
-function calculateVWAP(bars: OHLCVBar[]): { time: number; value: number }[] {
+function calculateSMA(bars: OHLCVBar[], period: number): { time: number; value: number }[] {
+  if (bars.length < period) return [];
   const result: { time: number; value: number }[] = [];
-  let cumTPV = 0;
-  let cumVol = 0;
-  let currentDay = '';
-  for (const bar of bars) {
-    const day = new Date(bar.time * 1000).toISOString().slice(0, 10);
-    if (day !== currentDay) { cumTPV = 0; cumVol = 0; currentDay = day; }
-    const tp = (bar.high + bar.low + bar.close) / 3;
-    cumTPV += tp * bar.volume;
-    cumVol += bar.volume;
-    result.push({ time: bar.time, value: cumVol > 0 ? cumTPV / cumVol : bar.close });
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += bars[i].close;
+  result.push({ time: bars[period - 1].time, value: sum / period });
+  for (let i = period; i < bars.length; i++) {
+    sum += bars[i].close - bars[i - period].close;
+    result.push({ time: bars[i].time, value: sum / period });
   }
   return result;
 }
 
-// ─── Utility: Previous Day H/L/C ─────────────────────────────────────────────
+// ─── Utility: RSI-14 (Wilder's smoothed method) ───────────────────────────────
 
-function getPrevDayHLC(bars: OHLCVBar[]): { high: number; low: number; close: number } | null {
-  if (!bars.length) return null;
-  const byDate = new Map<string, OHLCVBar[]>();
-  for (const b of bars) {
-    const d = new Date(b.time * 1000).toISOString().slice(0, 10);
-    if (!byDate.has(d)) byDate.set(d, []);
-    byDate.get(d)!.push(b);
+function calculateRSI(bars: OHLCVBar[], period = 14): { time: number; value: number }[] {
+  if (bars.length < period + 1) return [];
+  const result: { time: number; value: number }[] = [];
+
+  // Seed with simple averages over the first `period` changes
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = bars[i].close - bars[i - 1].close;
+    if (diff > 0) avgGain += diff;
+    else          avgLoss -= diff;
   }
-  const dates = Array.from(byDate.keys()).sort();
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const prev = dates.filter((d) => d < todayStr).at(-1) ?? dates.at(-2);
-  if (!prev) return null;
-  const g = byDate.get(prev)!;
-  return { high: Math.max(...g.map((b) => b.high)), low: Math.min(...g.map((b) => b.low)), close: g.at(-1)!.close };
-}
+  avgGain /= period;
+  avgLoss /= period;
+  const firstRS = avgLoss === 0 ? 100 : avgGain / avgLoss;
+  result.push({ time: bars[period].time, value: 100 - 100 / (1 + firstRS) });
 
-// ─── Utility: Pivot Points ────────────────────────────────────────────────────
-
-function calcPivots(h: number, l: number, c: number) {
-  const pp = (h + l + c) / 3;
-  return { pp, r1: 2 * pp - l, r2: pp + (h - l), s1: 2 * pp - h, s2: pp - (h - l) };
-}
-
-// ─── Utility: Order Blocks ────────────────────────────────────────────────────
-
-function findOrderBlocks(bars: OHLCVBar[], limit = 4) {
-  const obs: { time: number; high: number; low: number; type: 'bull' | 'bear' }[] = [];
-  for (let i = 1; i < bars.length - 1; i++) {
-    const curr = bars[i];
-    const next = bars[i + 1];
-    const currBody = Math.abs(curr.close - curr.open);
-    const nextBody = Math.abs(next.close - next.open);
-    if (currBody < 0.001) continue;
-    if (curr.close < curr.open && next.close > next.open && nextBody > currBody * 1.5)
-      obs.push({ time: curr.time, high: curr.high, low: curr.low, type: 'bull' });
-    if (curr.close > curr.open && next.close < next.open && nextBody > currBody * 1.5)
-      obs.push({ time: curr.time, high: curr.high, low: curr.low, type: 'bear' });
+  // Wilder smoothing for subsequent bars
+  for (let i = period + 1; i < bars.length; i++) {
+    const diff = bars[i].close - bars[i - 1].close;
+    const gain = diff > 0 ? diff : 0;
+    const loss = diff < 0 ? -diff : 0;
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    result.push({ time: bars[i].time, value: 100 - 100 / (1 + rs) });
   }
-  return obs.slice(-limit);
-}
-
-// ─── Utility: Fair Value Gaps ─────────────────────────────────────────────────
-
-function findFVGs(bars: OHLCVBar[], limit = 5) {
-  const fvgs: { time: number; top: number; bottom: number; type: 'bull' | 'bear' }[] = [];
-  for (let i = 1; i < bars.length - 1; i++) {
-    const prev = bars[i - 1];
-    const next = bars[i + 1];
-    if (next.low > prev.high && next.low - prev.high > 0.01)
-      fvgs.push({ time: bars[i].time, top: next.low, bottom: prev.high, type: 'bull' });
-    if (next.high < prev.low && prev.low - next.high > 0.01)
-      fvgs.push({ time: bars[i].time, top: prev.low, bottom: next.high, type: 'bear' });
-  }
-  return fvgs.slice(-limit);
+  return result;
 }
 
 // ─── Tooltip ─────────────────────────────────────────────────────────────────
@@ -201,14 +170,21 @@ function Tooltip({ tip, visible }: { tip: OHLCTooltip | null; visible: boolean }
 
 // ─── Indicator Toggle Button ──────────────────────────────────────────────────
 
-function IndicatorBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function IndicatorBtn({
+  label, active, color, onClick,
+}: { label: string; active: boolean; color?: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       className={clsx(
-        'px-2 py-0.5 rounded text-[10px] font-mono transition-colors shrink-0',
-        active ? 'bg-accent/20 text-accent border border-accent/40' : 'text-text-muted hover:text-gray-300 border border-transparent'
+        'px-2 py-0.5 rounded text-[10px] font-mono transition-colors shrink-0 border',
+        active && !color && 'bg-accent/20 text-accent border-accent/40',
+        active &&  color && 'border-transparent',
+        !active           && 'text-text-muted hover:text-gray-300 border-transparent',
       )}
+      style={active && color
+        ? { color, borderColor: `${color}55`, backgroundColor: `${color}18` }
+        : undefined}
     >
       {label}
     </button>
@@ -227,23 +203,25 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
   const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
   const [chartType, setChartType] = useState<ChartType>('candle');
   const [indicators, setIndicators] = useState<IndicatorState>({
-    vwap: true, pdhl: true, pivots: true, ob: true, fvg: true, volume: true,
+    sma20: true, sma50: true, sma100: true, sma200: true, volume: true, rsi: true,
   });
   const [tooltip, setTooltip] = useState<OHLCTooltip | null>(null);
   const [tooltipVisible, setTooltipVisible] = useState(false);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
+  const containerRef  = useRef<HTMLDivElement>(null);
+  const chartRef      = useRef<IChartApi | null>(null);
   const mainSeriesRef = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Bar'> | ISeriesApi<'Line'> | null>(null);
-  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
-  const vwapSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const overlayLinesRef = useRef<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']>[]>([]);
+  const volumeRef     = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const sma20Ref      = useRef<ISeriesApi<'Line'> | null>(null);
+  const sma50Ref      = useRef<ISeriesApi<'Line'> | null>(null);
+  const sma100Ref     = useRef<ISeriesApi<'Line'> | null>(null);
+  const sma200Ref     = useRef<ISeriesApi<'Line'> | null>(null);
+  const rsiRef        = useRef<ISeriesApi<'Line'> | null>(null);
 
   const cfg = TIMEFRAME_CONFIG[timeframe];
   const { data: rawBars = [], isLoading } = useHistory(symbol, cfg.period, cfg.interval);
   const { data: quote } = useQuote(symbol);
 
-  // Aggregate 4H from 1H raw data
   const bars: OHLCVBar[] = timeframe === '4h' ? aggregate4h(rawBars) : rawBars;
 
   const toggleIndicator = useCallback((key: keyof IndicatorState) => {
@@ -270,29 +248,67 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
         vertLine: { color: COLORS.crosshair, labelBackgroundColor: '#1c1c28' },
         horzLine: { color: COLORS.crosshair, labelBackgroundColor: '#1c1c28' },
       },
-      rightPriceScale: { borderColor: '#1a1a28', scaleMargins: { top: 0.08, bottom: 0.22 } },
+      // Default margins assume RSI is on (matches initial indicator state)
+      rightPriceScale: { borderColor: '#1a1a28', scaleMargins: MARGINS_RSI_ON },
       timeScale: { borderColor: '#1a1a28', timeVisible: true, secondsVisible: false },
       handleScroll: true,
       handleScale: true,
     });
-
     chartRef.current = chart;
 
-    // Volume series (always created, shown/hidden via data)
+    // ── Volume histogram (bottom ~15%) ────────────────────────────────────
     const vol = chart.addHistogramSeries({
       priceFormat: { type: 'volume' },
       priceScaleId: 'vol',
     });
-    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-    volumeSeriesRef.current = vol;
+    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+    volumeRef.current = vol;
+
+    // ── SMA overlays (main price scale) ──────────────────────────────────
+    const makeSMA = (color: string): ISeriesApi<'Line'> =>
+      chart.addLineSeries({
+        color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+
+    sma20Ref.current  = makeSMA(COLORS.sma20);
+    sma50Ref.current  = makeSMA(COLORS.sma50);
+    sma100Ref.current = makeSMA(COLORS.sma100);
+    sma200Ref.current = makeSMA(COLORS.sma200);
+
+    // ── RSI sub-panel (middle ~18%, between main and volume) ───────────
+    const rsiSeries = chart.addLineSeries({
+      color: COLORS.rsi,
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+      priceScaleId: 'rsi',
+    });
+    chart.priceScale('rsi').applyOptions({
+      scaleMargins: { top: 0.63, bottom: 0.18 },
+    });
+    // Overbought / oversold / midline reference lines
+    rsiSeries.createPriceLine({ price: 70, color: 'rgba(239,68,68,0.55)',   lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,  title: '70' });
+    rsiSeries.createPriceLine({ price: 30, color: 'rgba(34,197,94,0.55)',   lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,  title: '30' });
+    rsiSeries.createPriceLine({ price: 50, color: 'rgba(148,163,184,0.2)', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: ''   });
+    rsiRef.current = rsiSeries;
 
     return () => {
       chart.remove();
-      chartRef.current = null;
+      chartRef.current    = null;
       mainSeriesRef.current = null;
-      volumeSeriesRef.current = null;
-      vwapSeriesRef.current = null;
-      overlayLinesRef.current = [];
+      volumeRef.current   = null;
+      sma20Ref.current    = null;
+      sma50Ref.current    = null;
+      sma100Ref.current   = null;
+      sma200Ref.current   = null;
+      rsiRef.current      = null;
     };
   }, []);
 
@@ -305,17 +321,12 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
       chart.removeSeries(mainSeriesRef.current);
       mainSeriesRef.current = null;
     }
-    if (vwapSeriesRef.current) {
-      chart.removeSeries(vwapSeriesRef.current);
-      vwapSeriesRef.current = null;
-    }
-    overlayLinesRef.current = [];
 
     if (chartType === 'candle') {
       mainSeriesRef.current = chart.addCandlestickSeries({
         upColor: COLORS.upCandle, downColor: COLORS.downCandle,
         borderUpColor: COLORS.upCandle, borderDownColor: COLORS.downCandle,
-        wickUpColor: COLORS.upCandle, wickDownColor: COLORS.downCandle,
+        wickUpColor:   COLORS.upCandle, wickDownColor:   COLORS.downCandle,
       });
     } else if (chartType === 'bar') {
       mainSeriesRef.current = chart.addBarSeries({
@@ -326,31 +337,21 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
         color: '#6366f1', lineWidth: 2, priceLineVisible: false,
       });
     }
-
-    // VWAP line series (always created; data set conditionally)
-    vwapSeriesRef.current = chart.addLineSeries({
-      color: COLORS.vwap, lineWidth: 1, lineStyle: LineStyle.Solid,
-      priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
-    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartType]);
 
-  // ── Feed data and overlays when bars/indicators change ────────────────────
+  // ── Feed data + update indicators when bars / state change ────────────────
   useEffect(() => {
     const chart = chartRef.current;
-    const main = mainSeriesRef.current;
-    const vol = volumeSeriesRef.current;
-    const vwapSeries = vwapSeriesRef.current;
+    const main  = mainSeriesRef.current;
     if (!chart || !main || !bars.length) return;
 
-    // Clear old price lines
-    overlayLinesRef.current.forEach((pl) => {
-      try { (main as ISeriesApi<'Candlestick'>).removePriceLine(pl); } catch { /* already removed */ }
-    });
-    overlayLinesRef.current = [];
+    type LCTime = import('lightweight-charts').Time;
+    const toTime = (t: number) => t as unknown as LCTime;
 
-    const tvBars = bars.map((b) => ({ time: b.time as unknown as import('lightweight-charts').Time, open: b.open, high: b.high, low: b.low, close: b.close }));
-    const tvLine = bars.map((b) => ({ time: b.time as unknown as import('lightweight-charts').Time, value: b.close }));
+    // Main series
+    const tvBars = bars.map((b) => ({ time: toTime(b.time), open: b.open, high: b.high, low: b.low, close: b.close }));
+    const tvLine = bars.map((b) => ({ time: toTime(b.time), value: b.close }));
 
     if (chartType === 'candle' || chartType === 'bar') {
       (main as ISeriesApi<'Candlestick'>).setData(tvBars);
@@ -359,11 +360,11 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
     }
 
     // Volume
-    if (vol) {
-      vol.setData(
+    if (volumeRef.current) {
+      volumeRef.current.setData(
         indicators.volume
           ? bars.map((b) => ({
-              time: b.time as unknown as import('lightweight-charts').Time,
+              time:  toTime(b.time),
               value: b.volume,
               color: b.close >= b.open ? COLORS.volume.up : COLORS.volume.down,
             }))
@@ -371,54 +372,29 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
       );
     }
 
-    // VWAP
-    if (vwapSeries) {
-      if (indicators.vwap && cfg.isIntraday) {
-        const vd = calculateVWAP(bars);
-        vwapSeries.setData(vd.map((v) => ({ time: v.time as unknown as import('lightweight-charts').Time, value: v.value })));
-      } else {
-        vwapSeries.setData([]);
-      }
-    }
-
-    const addLine = (price: number, color: string, title: string, style: LineStyle = LineStyle.Dashed) => {
-      const pl = (main as ISeriesApi<'Candlestick'>).createPriceLine({ price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title });
-      overlayLinesRef.current.push(pl);
+    // SMA helper
+    const feedSMA = (s: ISeriesApi<'Line'> | null, on: boolean, period: number) => {
+      if (!s) return;
+      s.setData(
+        on
+          ? calculateSMA(bars, period).map((p) => ({ time: toTime(p.time), value: p.value }))
+          : []
+      );
     };
+    feedSMA(sma20Ref.current,  indicators.sma20,  20);
+    feedSMA(sma50Ref.current,  indicators.sma50,  50);
+    feedSMA(sma100Ref.current, indicators.sma100, 100);
+    feedSMA(sma200Ref.current, indicators.sma200, 200);
 
-    // Previous Day H/L/C
-    const pd = getPrevDayHLC(bars);
-    if (indicators.pdhl && pd) {
-      addLine(pd.high, COLORS.pdh, 'PDH', LineStyle.Dashed);
-      addLine(pd.low, COLORS.pdl, 'PDL', LineStyle.Dashed);
-      addLine(pd.close, COLORS.pdc, 'PDC', LineStyle.Dotted);
-
-      // Pivot Points
-      if (indicators.pivots) {
-        const { pp, r1, r2, s1, s2 } = calcPivots(pd.high, pd.low, pd.close);
-        addLine(pp, COLORS.pp, 'PP', LineStyle.Solid);
-        addLine(r1, COLORS.pivot, 'R1', LineStyle.Dashed);
-        addLine(r2, COLORS.pivot, 'R2', LineStyle.Dashed);
-        addLine(s1, COLORS.pivot, 'S1', LineStyle.Dashed);
-        addLine(s2, COLORS.pivot, 'S2', LineStyle.Dashed);
-      }
-    }
-
-    // Order Blocks (top + bottom lines)
-    if (indicators.ob) {
-      findOrderBlocks(bars).forEach(({ high, low, type }) => {
-        const color = type === 'bull' ? COLORS.obBull : COLORS.obBear;
-        addLine(high, color, type === 'bull' ? 'OB▲' : 'OB▼', LineStyle.Solid);
-        addLine(low, color, '', LineStyle.Dotted);
-      });
-    }
-
-    // Fair Value Gaps (top + bottom lines)
-    if (indicators.fvg) {
-      findFVGs(bars).forEach(({ top, bottom, type }) => {
-        const color = type === 'bull' ? '#22c55e' : '#ef4444';
-        addLine(top, color, type === 'bull' ? 'FVG▲' : 'FVG▼', LineStyle.LargeDashed);
-        addLine(bottom, color, '', LineStyle.LargeDashed);
+    // RSI + dynamic main-chart bottom margin
+    if (rsiRef.current) {
+      rsiRef.current.setData(
+        indicators.rsi
+          ? calculateRSI(bars).map((p) => ({ time: toTime(p.time), value: p.value }))
+          : []
+      );
+      chart.priceScale('right').applyOptions({
+        scaleMargins: indicators.rsi ? MARGINS_RSI_ON : MARGINS_RSI_OFF,
       });
     }
 
@@ -432,20 +408,17 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
     if (!chart) return;
 
     const handler = (param: MouseEventParams) => {
-      if (!param.time || !mainSeriesRef.current) {
-        setTooltipVisible(false);
-        return;
-      }
+      if (!param.time || !mainSeriesRef.current) { setTooltipVisible(false); return; }
       const raw = param.seriesData.get(mainSeriesRef.current);
       if (!raw) { setTooltipVisible(false); return; }
 
       let o: number, h: number, l: number, c: number;
-      if ('open' in raw) { o = raw.open; h = raw.high; l = raw.low; c = raw.close; }
+      if ('open' in raw)       { o = raw.open; h = raw.high; l = raw.low; c = raw.close; }
       else if ('value' in raw) { o = raw.value; h = raw.value; l = raw.value; c = raw.value; }
       else { setTooltipVisible(false); return; }
 
       const barIdx = bars.findIndex((b) => b.time === (param.time as unknown as number));
-      const prev = barIdx > 0 ? bars[barIdx - 1].close : o;
+      const prev   = barIdx > 0 ? bars[barIdx - 1].close : o;
       const change = c - prev;
 
       const d = new Date((param.time as unknown as number) * 1000);
@@ -465,7 +438,7 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
     return () => chart.unsubscribeCrosshairMove(handler);
   }, [bars, cfg.isIntraday]);
 
-  // ── Earnings markers (Finnhub, optional) ─────────────────────────────────
+  // ── Earnings markers ──────────────────────────────────────────────────────
   const { data: earningsDates } = useEarnings(symbol);
 
   useEffect(() => {
@@ -477,27 +450,23 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
       return;
     }
 
-    // Map earnings dates to unix timestamps for matching with bars
     const earningsSet = new Set(earningsDates.map((e) => e.date));
     const today = new Date().toISOString().slice(0, 10);
 
     const markers = bars
-      .filter((b) => {
-        const day = new Date(b.time * 1000).toISOString().slice(0, 10);
-        return earningsSet.has(day);
-      })
+      .filter((b) => earningsSet.has(new Date(b.time * 1000).toISOString().slice(0, 10)))
       .map((b) => {
         const day = new Date(b.time * 1000).toISOString().slice(0, 10);
-        const ed = earningsDates.find((e) => e.date === day)!;
+        const ed  = earningsDates.find((e) => e.date === day)!;
         const upcoming = day >= today;
-        const pos = ed.surprise != null && ed.surprise >= 0;
+        const pos      = ed.surprise != null && ed.surprise >= 0;
         return {
-          time: b.time as unknown as import('lightweight-charts').Time,
+          time:     b.time as unknown as import('lightweight-charts').Time,
           position: 'belowBar' as const,
-          color: upcoming ? '#f59e0b' : pos ? '#22c55e' : '#ef4444',
-          shape: 'arrowUp' as const,
-          text: upcoming ? 'E' : ed.surprise != null ? `E ${pos ? '+' : ''}${ed.surprise.toFixed(1)}%` : 'E',
-          size: 1,
+          color:    upcoming ? '#f59e0b' : pos ? '#22c55e' : '#ef4444',
+          shape:    'arrowUp' as const,
+          text:     upcoming ? 'E' : ed.surprise != null ? `E ${pos ? '+' : ''}${ed.surprise.toFixed(1)}%` : 'E',
+          size:     1,
         };
       });
 
@@ -508,14 +477,14 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
 
   const TIMEFRAMES: Timeframe[] = ['5m', '15m', '30m', '1h', '4h', '1d', '1w'];
   const TF_LABELS: Record<Timeframe, string> = { '5m': '5M', '15m': '15M', '30m': '30M', '1h': '1H', '4h': '4H', '1d': '1D', '1w': '1W' };
-
   const isPos = (quote?.changePercent ?? 0) >= 0;
 
   return (
     <div className={clsx('flex flex-col min-h-0 bg-bg-primary select-none', className)}>
 
-      {/* ── Top bar: symbol info + chart type + timeframes ── */}
+      {/* ── Top bar: symbol info + chart type + timeframes + indicators ── */}
       <div className="flex items-center gap-2 px-2 h-9 border-b border-panel bg-bg-secondary shrink-0 overflow-x-auto no-scrollbar">
+
         {/* Price summary */}
         {quote && (
           <div className="flex items-center gap-2 shrink-0">
@@ -561,13 +530,13 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
 
         <div className="w-px h-4 bg-panel shrink-0" />
 
-        {/* Indicator toggles */}
-        <IndicatorBtn label="VWAP" active={indicators.vwap} onClick={() => toggleIndicator('vwap')} />
-        <IndicatorBtn label="PDH/L" active={indicators.pdhl} onClick={() => toggleIndicator('pdhl')} />
-        <IndicatorBtn label="PVTS" active={indicators.pivots} onClick={() => toggleIndicator('pivots')} />
-        <IndicatorBtn label="OB" active={indicators.ob} onClick={() => toggleIndicator('ob')} />
-        <IndicatorBtn label="FVG" active={indicators.fvg} onClick={() => toggleIndicator('fvg')} />
-        <IndicatorBtn label="VOL" active={indicators.volume} onClick={() => toggleIndicator('volume')} />
+        {/* SMA toggles — each button uses the SMA's own colour when active */}
+        <IndicatorBtn label="SMA20"  active={indicators.sma20}  color={COLORS.sma20}  onClick={() => toggleIndicator('sma20')} />
+        <IndicatorBtn label="SMA50"  active={indicators.sma50}  color={COLORS.sma50}  onClick={() => toggleIndicator('sma50')} />
+        <IndicatorBtn label="SMA100" active={indicators.sma100} color={COLORS.sma100} onClick={() => toggleIndicator('sma100')} />
+        <IndicatorBtn label="SMA200" active={indicators.sma200} color={COLORS.sma200} onClick={() => toggleIndicator('sma200')} />
+        <IndicatorBtn label="VOL"    active={indicators.volume}                        onClick={() => toggleIndicator('volume')} />
+        <IndicatorBtn label="RSI"    active={indicators.rsi}    color={COLORS.rsi}    onClick={() => toggleIndicator('rsi')} />
       </div>
 
       {/* ── Chart canvas ── */}
