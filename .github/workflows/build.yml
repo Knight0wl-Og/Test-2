@@ -6,7 +6,6 @@ on:
       - 'v*'
     branches:
       - 'release/*'
-      - 'main'
   workflow_dispatch:
 
 permissions:
