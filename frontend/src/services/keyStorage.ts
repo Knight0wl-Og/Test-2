@@ -54,6 +54,11 @@ function isNativeAndroid(): boolean {
   return Capacitor.isNativePlatform();
 }
 
+/** True only when the @capacitor/preferences native plugin is actually registered */
+function isPreferencesAvailable(): boolean {
+  return isNativeAndroid() && Capacitor.isPluginAvailable('Preferences');
+}
+
 // Lazy import for Capacitor Preferences (only available on native)
 async function getPreferences() {
   const { Preferences } = await import('@capacitor/preferences');
@@ -70,7 +75,8 @@ export async function getKey(name: string): Promise<string> {
       return localStorage.getItem(name) ?? '';
     }
   }
-  if (isNativeAndroid()) {
+  // Only use native Preferences when the plugin is actually registered in the APK
+  if (isPreferencesAvailable()) {
     try {
       const Preferences = await getPreferences();
       const { value } = await Preferences.get({ key: name });
@@ -98,12 +104,17 @@ export async function setKey(name: string, value: string): Promise<void> {
     }
     return;
   }
-  if (isNativeAndroid()) {
-    const Preferences = await getPreferences();
-    if (value) {
-      await Preferences.set({ key: name, value });
-    } else {
-      await Preferences.remove({ key: name });
+  // Only use native Preferences when the plugin is actually registered in the APK
+  if (isPreferencesAvailable()) {
+    try {
+      const Preferences = await getPreferences();
+      if (value) {
+        await Preferences.set({ key: name, value });
+      } else {
+        await Preferences.remove({ key: name });
+      }
+    } catch (e) {
+      console.warn('[keyStorage] setKey native error (non-fatal):', e);
     }
     return;
   }
@@ -119,10 +130,13 @@ export async function clearAllKeys(): Promise<void> {
     await window.electronAPI!.clearAllKeys();
     return;
   }
-  if (isNativeAndroid()) {
-    const Preferences = await getPreferences();
-    await Preferences.clear();
-    return;
+  if (isPreferencesAvailable()) {
+    try {
+      const Preferences = await getPreferences();
+      await Preferences.clear();
+    } catch (e) {
+      console.warn('[keyStorage] clearAllKeys native error (non-fatal):', e);
+    }
   }
   KEY_NAMES.forEach((k) => localStorage.removeItem(k));
 }

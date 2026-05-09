@@ -23,27 +23,26 @@ if (Capacitor.isNativePlatform()) {
   })();
 }
 
-// Bootstrap: migrate existing localStorage keys → persistent store (first run),
-// then restore persisted keys → localStorage (post-reinstall recovery).
-// ALWAYS resolves — key persistence is non-fatal, app must render regardless.
-async function bootstrap() {
+// Render immediately — never block the UI for key storage.
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+
+// Key bootstrap runs in background after React is already mounted.
+// Fire-and-forget: any hang or error here is completely non-fatal.
+(async () => {
   try {
     await migrateLocalStorageKeys();
     await restoreKeysToLocalStorage();
   } catch (e) {
     console.warn('[TradeEdge] Key bootstrap failed (non-fatal):', e);
   }
-}
+})();
 
-bootstrap().then(() => {
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <App />
-    </StrictMode>
-  );
-  // Sync earnings calendar into the watchlist 2s after mount (non-blocking)
-  setTimeout(syncEarningsWatchlist, 2000);
-});
+// Sync earnings calendar into the watchlist 2s after mount (non-blocking)
+setTimeout(syncEarningsWatchlist, 2000);
 
 // Handle Schwab OAuth redirect: tradeedge://oauth/callback?code=...
 if (Capacitor.isNativePlatform()) {
