@@ -1,0 +1,26 @@
+build/
+.cache/
+compile_commands.json
+
+# Build artefacts
+*.o
+*.a
+*.so
+*.pyd
+*.dll
+*.exe
+*.AppImage
+
+# CMake generated
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+_deps/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
