@@ -121,7 +121,21 @@ ${schema}`;
       }
     );
     const data = await res.json();
-    raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    if (!res.ok) {
+      const msg = data?.error?.message ?? `HTTP ${res.status}`;
+      throw new Error(`Gemini error: ${msg}`);
+    }
+    if (data?.promptFeedback?.blockReason) {
+      throw new Error(`Gemini blocked the request: ${data.promptFeedback.blockReason}`);
+    }
+    const candidate = data?.candidates?.[0];
+    if (!candidate) {
+      throw new Error('Gemini returned no candidates — check your API key quota or try again.');
+    }
+    if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+      throw new Error(`Gemini stopped early (${candidate.finishReason}) — try refreshing.`);
+    }
+    raw = candidate?.content?.parts?.[0]?.text ?? '';
   } else if (groqKey) {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -134,6 +148,10 @@ ${schema}`;
       }),
     });
     const data = await res.json();
+    if (!res.ok) {
+      const msg = data?.error?.message ?? `HTTP ${res.status}`;
+      throw new Error(`Groq error: ${msg}`);
+    }
     raw = data?.choices?.[0]?.message?.content ?? '';
   } else {
     throw new Error('No AI key configured — add a Gemini or Groq key in Settings to generate the brief.');
