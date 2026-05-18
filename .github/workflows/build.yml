@@ -88,22 +88,34 @@ jobs:
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       # ── Android signing keystore ──────────────────────────────────────
-      # Restores a fixed keystore from secrets so every build is signed
-      # identically — this is what allows "install over existing APK" to work.
-      # If the secret is missing a new keystore is generated (first-run only).
-      - name: Restore Android signing keystore
+      # On the very first build the keystore is generated and committed back
+      # to the repo so every subsequent build reuses the exact same file —
+      # this is what allows "install over existing APK" without any manual
+      # secret setup.
+      - name: Setup Android signing keystore
         run: |
+          KEYSTORE_REPO="frontend/android/app/tradeedge-debug.keystore"
+          KEYSTORE_HOME="$HOME/.android/debug.keystore"
           mkdir -p $HOME/.android
-          if [ -n "${{ secrets.ANDROID_KEYSTORE_B64 }}" ]; then
-            echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > $HOME/.android/debug.keystore
-            echo "✓ Keystore restored from secret"
+
+          if [ -f "$KEYSTORE_REPO" ]; then
+            cp "$KEYSTORE_REPO" "$KEYSTORE_HOME"
+            echo "✓ Keystore loaded from repo"
           else
+            echo "First run — generating debug keystore and committing to repo..."
             keytool -genkey -v \
-              -keystore $HOME/.android/debug.keystore \
+              -keystore "$KEYSTORE_HOME" \
               -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass android -keypass android \
               -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
-            echo "⚠ Generated one-time keystore — add ANDROID_KEYSTORE_B64 secret to fix update installs"
+            cp "$KEYSTORE_HOME" "$KEYSTORE_REPO"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git config user.name "github-actions[bot]"
+            git add -f "$KEYSTORE_REPO"
+            git commit -m "ci: store Android debug keystore for consistent APK signing"
+            git remote set-url origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+            git push origin HEAD:main
+            echo "✓ Keystore generated and committed — all future builds use this keystore"
           fi
 
       # ── Android APK ───────────────────────────────────────────────────
