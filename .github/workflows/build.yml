@@ -142,13 +142,10 @@ jobs:
       - name: Verify APK
         run: ls -lh frontend/android/app/build/outputs/apk/debug/app-debug.apk
 
-      # ── Create Codeberg Release ───────────────────────────────────────
-      - name: Install jq
-        run: apt-get install -y jq
-
-      - name: Create Codeberg Release and upload artifacts
+      # ── Create GitHub Release ─────────────────────────────────────────
+      - name: Create GitHub Release and upload artifacts
         env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REF="${GITHUB_REF}"
           if [[ "$REF" == refs/tags/* ]]; then
@@ -156,62 +153,36 @@ jobs:
           elif [[ "$REF" == refs/heads/release/* ]]; then
             TAG="${REF#refs/heads/release/}"
           else
-            TAG="v3.0.0"
+            TAG="v3.5.4"
           fi
           echo "Tag: $TAG"
 
           # Delete any existing release for this tag
-          EXISTING=$(curl -s \
-            "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/tags/$TAG" \
-            -H "Authorization: token $TOKEN" | jq -r '.id // empty')
-          if [ -n "$EXISTING" ]; then
-            echo "Deleting existing release $EXISTING..."
-            curl -s -X DELETE \
-              "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$EXISTING" \
-              -H "Authorization: token $TOKEN"
-          fi
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
 
-          # Create release
-          RESP=$(curl -s -X POST \
-            "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases" \
-            -H "Authorization: token $TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"tag_name\": \"$TAG\",
-              \"name\": \"TradeEdge $TAG\",
-              \"draft\": false,
-              \"prerelease\": false,
-              \"body\": \"## TradeEdge $TAG\n\n### What's New in v3.0.0\n- MarketBrief AI slide deck (Gemini/Groq powered, swipeable slides)\n- Full Research Hub with 13 feature pages\n- Intel Library, Covered Call ETFs, Dividends, Earnings suite, Economic Calendar\n- EPS & Valuation, ETF Flows, P/E Analyzer, Profitability Compare, Technicals\n- Research Hub section in Sidebar\n- Android build improvements\n\n### Downloads\n| Platform | File | Notes |\n|---|---|---|\n| Linux (64-bit) | \`TradeEdge.AppImage\` | \`chmod +x\` then run |\n| Android 7+ | \`TradeEdge.apk\` | Enable 'Install unknown apps', tap to install |\n\n### Quick Start\nBoth apps launch with live market data immediately — no backend required. Add your free FMP key in Settings to unlock all 13 research features.\"
-            }")
-          RELEASE_ID=$(echo "$RESP" | jq -r '.id')
-          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
-            echo "ERROR: Failed to create release: $RESP"
-            exit 1
-          fi
-          echo "Release ID: $RELEASE_ID"
-
-          upload_asset() {
-            local FILE="$1"
-            local NAME="$2"
-            echo "Uploading $NAME ($(du -sh "$FILE" | cut -f1))..."
-            HTTP=$(curl -s -o /tmp/upload_resp.json -w "%{http_code}" -X POST \
-              "https://codeberg.org/api/v1/repos/Knight0wl/TradeEdge/releases/$RELEASE_ID/assets?name=$NAME" \
-              -H "Authorization: token $TOKEN" \
-              -F "attachment=@$FILE")
-            echo "HTTP $HTTP: $(cat /tmp/upload_resp.json)"
-            [ "$HTTP" = "201" ] && echo "✓ $NAME uploaded" || echo "✗ $NAME upload failed (HTTP $HTTP)"
-          }
-
-          # Upload AppImage
+          # Collect assets
+          ASSETS=()
           for f in electron/out/*.AppImage; do
-            [ -f "$f" ] && upload_asset "$f" "$(basename "$f")" || echo "No AppImage found"
+            [ -f "$f" ] && ASSETS+=("$f")
           done
-
-          # Upload APK
           APK="frontend/android/app/build/outputs/apk/debug/app-debug.apk"
-          [ -f "$APK" ] && upload_asset "$APK" "TradeEdge.apk" || echo "No APK found"
+          [ -f "$APK" ] && ASSETS+=("$APK#TradeEdge.apk")
+          [ -f bundle.zip ] && ASSETS+=("bundle.zip")
 
-          # Upload OTA bundle
-          [ -f bundle.zip ] && upload_asset bundle.zip bundle.zip || echo "No bundle.zip found"
+          # Create release and upload all assets
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "TradeEdge $TAG" \
+            --notes "## TradeEdge $TAG
 
-          echo "Done: https://codeberg.org/Knight0wl/TradeEdge/releases/tag/$TAG"
+### Downloads
+| Platform | File | Notes |
+|---|---|---|
+| Linux (64-bit) | \`TradeEdge.AppImage\` | \`chmod +x\` then run |
+| Android 7+ | \`TradeEdge.apk\` | Enable 'Install unknown apps', tap to install |
+
+### Quick Start
+Both apps launch with live market data immediately — no backend required. Add your free FMP key in Settings to unlock research features." \
+            "${ASSETS[@]}"
+
+          echo "Done: https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG"
