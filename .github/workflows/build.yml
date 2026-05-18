@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # ── Node & JS deps ────────────────────────────────────────────────
       - name: Setup Node.js
@@ -114,7 +116,7 @@ jobs:
             git add -f "$KEYSTORE_REPO"
             git commit -m "ci: store Android debug keystore for consistent APK signing"
             git remote set-url origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
-            git push origin HEAD:main
+            git push origin HEAD:refs/heads/main || exit 1
             echo "✓ Keystore generated and committed — all future builds use this keystore"
           fi
 
