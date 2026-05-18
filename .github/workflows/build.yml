@@ -87,6 +87,25 @@ jobs:
           yes | sdkmanager --licenses 2>/dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
+      # ── Android signing keystore ──────────────────────────────────────
+      # Restores a fixed keystore from secrets so every build is signed
+      # identically — this is what allows "install over existing APK" to work.
+      # If the secret is missing a new keystore is generated (first-run only).
+      - name: Restore Android signing keystore
+        run: |
+          mkdir -p $HOME/.android
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_B64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > $HOME/.android/debug.keystore
+            echo "✓ Keystore restored from secret"
+          else
+            keytool -genkey -v \
+              -keystore $HOME/.android/debug.keystore \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
+            echo "⚠ Generated one-time keystore — add ANDROID_KEYSTORE_B64 secret to fix update installs"
+          fi
+
       # ── Android APK ───────────────────────────────────────────────────
       - name: Create OTA bundle zip
         run: cd frontend/dist && zip -r ../../bundle.zip .
