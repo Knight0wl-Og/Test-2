@@ -269,9 +269,19 @@ jobs:
           elif [[ "$REF" == refs/heads/release/* ]]; then
             TAG="${REF#refs/heads/release/}"
           else
-            TAG="v3.5.11"
+            TAG="v3.5.12"
           fi
           echo "Tag: $TAG"
+
+          cat > release-notes.md << 'NOTES'
+          ## Downloads
+          - **Windows 10/11** — TradeEdge-Setup-x64.exe (auto-updates silently)
+          - **Android 7+** — TradeEdge.apk (enable Install unknown apps, then tap to install)
+
+          ## Quick Start
+          Both apps launch with live market data immediately — no backend required.
+          Add your free FMP key in Settings to unlock all research features.
+          NOTES
 
           FILES=""
           [ -f dist/TradeEdge-Setup-x64.exe ] && FILES="$FILES dist/TradeEdge-Setup-x64.exe"
@@ -283,17 +293,7 @@ jobs:
           gh release create "$TAG" \
             --target "${GITHUB_SHA}" \
             --title "TradeEdge ${TAG}" \
-            --notes "## TradeEdge ${TAG}
-
-### Downloads
-| Platform | File | Notes |
-|---|---|---|
-| Windows 10/11 | \`TradeEdge-Setup-x64.exe\` | Auto-updates silently |
-| Android 7+ | \`TradeEdge.apk\` | Enable 'Install unknown apps', tap to install |
-
-### Quick Start
-Both apps launch with live market data immediately — no backend required.
-Add your free FMP key in Settings to unlock all research features." \
+            --notes-file release-notes.md \
             $FILES
 
       - name: Delete all artifacts to free storage
