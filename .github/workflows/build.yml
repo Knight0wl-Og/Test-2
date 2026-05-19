@@ -183,7 +183,7 @@ jobs:
           elif [[ "$REF" == refs/heads/release/* ]]; then
             TAG="${REF#refs/heads/release/}"
           else
-            TAG="v3.5.10"
+            TAG="v3.5.11"
           fi
           echo "Tag: $TAG"
 
