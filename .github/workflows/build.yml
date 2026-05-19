@@ -5,6 +5,7 @@ on:
     tags:
       - 'v*'
     branches:
+      - 'main'
       - 'release/*'
   workflow_dispatch:
 
@@ -12,7 +13,36 @@ permissions:
   contents: write
 
 jobs:
+  # ── Lightweight job: runs only on main pushes ─────────────────────────
+  # Generates the keystore once and saves it to cache under the default
+  # branch so every tag-triggered build can restore it.
+  # (GitHub cache from main is accessible to all branches and tags.)
+  prime-keystore:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore keystore cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
+      - name: Generate keystore (first push to main only)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.android
+          keytool -genkey -v \
+            -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
+          echo "✓ Keystore generated and cached on main branch"
+          echo "  All future tag builds will restore this exact keystore."
+
+  # ── Full build: runs on tags, release/* branches, and manual dispatch ─
   build-and-release:
+    if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -153,7 +183,7 @@ jobs:
           elif [[ "$REF" == refs/heads/release/* ]]; then
             TAG="${REF#refs/heads/release/}"
           else
-            TAG="v3.5.4"
+            TAG="v3.5.10"
           fi
           echo "Tag: $TAG"
 
