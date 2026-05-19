@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, TrendingUp, LayoutGrid, List, SlidersHorizon
 import { useNavigate } from 'react-router-dom';
 import { useWatchlistStore } from '../store/watchlistStore';
 import { fetchEarningsCalendarRange, hasFinnhubKey } from '../services/finnhubService';
+import { EarningsDetail } from '../components/earnings/EarningsDetail';
 import clsx from 'clsx';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -257,6 +258,7 @@ export function Earnings() {
   const [stockFilter, setStockFilterState] = useState<StockFilter>(() => loadPref('earnings_filter', 'popular'));
   const [sortBy, setSortByState] = useState<SortBy>(() => loadPref('earnings_sort', 'time'));
   const [showSettings, setShowSettings] = useState(false);
+  const [detailSymbol, setDetailSymbol] = useState<string | null>(null);
   const hasKey = hasFinnhubKey();
 
   const days = getWeekDays(weekOffset);
@@ -274,7 +276,8 @@ export function Earnings() {
   function setStockFilter(v: StockFilter) { setStockFilterState(v); localStorage.setItem('earnings_filter', v); }
   function setSortBy(v: SortBy) { setSortByState(v); localStorage.setItem('earnings_sort', v); }
 
-  function handleSelect(symbol: string) { selectSymbol(symbol); navigate('/'); }
+  function handleSelect(symbol: string) { setDetailSymbol(symbol); }
+  function handleViewChart(symbol: string) { selectSymbol(symbol); navigate('/'); }
 
   // Apply filter
   const watchlistSet = new Set(allSymbols);
@@ -382,6 +385,15 @@ export function Earnings() {
             </p>
           )}
         </>
+      )}
+
+      {/* Earnings detail sheet */}
+      {detailSymbol && (
+        <EarningsDetail
+          symbol={detailSymbol}
+          onClose={() => setDetailSymbol(null)}
+          onViewChart={() => { handleViewChart(detailSymbol); setDetailSymbol(null); }}
+        />
       )}
 
       {/* Settings sheet */}
