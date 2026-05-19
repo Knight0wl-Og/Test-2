@@ -90,35 +90,33 @@ jobs:
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       # ── Android signing keystore ──────────────────────────────────────
-      # On the very first build the keystore is generated and committed back
-      # to the repo so every subsequent build reuses the exact same file —
-      # this is what allows "install over existing APK" without any manual
-      # secret setup.
-      - name: Setup Android signing keystore
-        run: |
-          KEYSTORE_REPO="frontend/android/app/tradeedge-debug.keystore"
-          KEYSTORE_HOME="$HOME/.android/debug.keystore"
-          mkdir -p $HOME/.android
+      # Cache the debug keystore so every build uses the exact same signing
+      # key — this is what allows "install over existing APK" to work.
+      # The cache key is fixed (v1), so all runs share one keystore.
+      # If the cache is ever evicted (7-day GitHub inactivity limit), a new
+      # keystore is generated and cached, and users need to reinstall once.
+      - name: Restore Android signing keystore
+        id: keystore-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
 
-          if [ -f "$KEYSTORE_REPO" ]; then
-            cp "$KEYSTORE_REPO" "$KEYSTORE_HOME"
-            echo "✓ Keystore loaded from repo"
-          else
-            echo "First run — generating debug keystore and committing to repo..."
-            keytool -genkey -v \
-              -keystore "$KEYSTORE_HOME" \
-              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass android -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
-            cp "$KEYSTORE_HOME" "$KEYSTORE_REPO"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git config user.name "github-actions[bot]"
-            git add -f "$KEYSTORE_REPO"
-            git commit -m "ci: store Android debug keystore for consistent APK signing"
-            git remote set-url origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
-            git push origin HEAD:refs/heads/main || exit 1
-            echo "✓ Keystore generated and committed — all future builds use this keystore"
-          fi
+      - name: Generate Android signing keystore (first run only)
+        if: steps.keystore-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.android
+          keytool -genkey -v \
+            -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
+          echo "✓ New keystore generated and saved to cache"
+
+      - name: Verify keystore
+        run: |
+          keytool -list -keystore ~/.android/debug.keystore -storepass android -noprompt
+          echo "✓ Keystore ready — $(keytool -list -keystore ~/.android/debug.keystore -storepass android -noprompt 2>/dev/null | grep 'androiddebugkey' | head -1)"
 
       # ── Android APK ───────────────────────────────────────────────────
       - name: Create OTA bundle zip
