@@ -1,23 +1,6 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
-const CACHE_KEY = 'tradeedge_earnings_cache';
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
-const WATCHLIST_KEY = 'tradeedge_watchlists';
-const EARNINGS_GROUP_ID = 'g4';
 const MAX_SYMBOLS = 30;
-
-interface EarningsCache {
-  weekKey: string;
-  fetchedAt: number;
-  symbols: string[];
-}
-
-function getISOWeekKey(): string {
-  const d = new Date();
-  const jan4 = new Date(d.getFullYear(), 0, 4);
-  const week = Math.ceil(((d.getTime() - jan4.getTime()) / 86_400_000 + jan4.getDay() + 1) / 7);
-  return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
-}
 
 function getWeekDates(): Date[] {
   const now = new Date();
@@ -78,42 +61,3 @@ export async function fetchEarningsThisWeekNative(): Promise<string[]> {
   return Array.from(all).slice(0, MAX_SYMBOLS);
 }
 
-export async function syncEarningsWatchlist(): Promise<void> {
-  try {
-    // Check cache validity
-    const weekKey = getISOWeekKey();
-    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null') as EarningsCache | null;
-    if (cached && cached.weekKey === weekKey && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-      // Cache is fresh — still apply to watchlist in case it was reset
-      applyToWatchlist(cached.symbols);
-      return;
-    }
-
-    // Fetch new data
-    const symbols = await fetchEarningsThisWeekNative();
-    if (symbols.length === 0) return; // Don't overwrite on failure
-
-    // Save cache
-    const newCache: EarningsCache = { weekKey, fetchedAt: Date.now(), symbols };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(newCache));
-
-    applyToWatchlist(symbols);
-  } catch (err) {
-    console.warn('[earningsSync] failed:', err);
-  }
-}
-
-function applyToWatchlist(symbols: string[]): void {
-  try {
-    const raw = localStorage.getItem(WATCHLIST_KEY);
-    if (!raw) return;
-    const groups = JSON.parse(raw);
-    const group = groups.find((g: { id: string }) => g.id === EARNINGS_GROUP_ID);
-    if (group) {
-      group.symbols = symbols;
-      localStorage.setItem(WATCHLIST_KEY, JSON.stringify(groups));
-    }
-  } catch {
-    // ignore
-  }
-}

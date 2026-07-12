@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
 import { confirmBundle } from './services/liveUpdate';
-import { syncEarningsWatchlist } from './services/earningsSync';
 import { migrateLocalStorageKeys, restoreKeysToLocalStorage, KEY_NAMES } from './services/keyStorage';
 import { Capacitor } from '@capacitor/core';
 
@@ -50,9 +49,6 @@ createRoot(document.getElementById('root')!).render(
     console.warn('[TradeEdge] Key bootstrap failed (non-fatal):', e);
   }
 })();
-
-// Sync earnings calendar into the watchlist 2s after mount (non-blocking)
-setTimeout(syncEarningsWatchlist, 2000);
 
 // Handle Schwab OAuth redirect: tradeedge://oauth/callback?code=...
 if (Capacitor.isNativePlatform()) {
