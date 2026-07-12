@@ -1,21 +1,20 @@
 import { useState } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { BarChart, Download } from 'lucide-react';
 import {
   fetchFinancialRatiosFMP,
   fetchKeyMetricsFMP,
   fetchIncomeStatementFMP,
   fetchCashFlowStatementFMP,
-  fetchAnalystEstimatesFMP,
-  fetchPriceTargetConsensusFMP,
   getFmpKey,
   type FMPFinancialRatios,
   type FMPKeyMetrics,
   type FMPIncomeStatement,
   type FMPCashFlowStatement,
-  type FMPAnalystEstimate,
-  type FMPPriceTargetConsensus,
 } from '../services/fmpService';
+import { fetchBatchQuotes, fetchResearch } from '../services/api';
+import type { ResearchData } from '../services/nativeResearch';
+import { KeyRequiredCard } from '../components/common/KeyRequiredCard';
 import clsx from 'clsx';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -173,9 +172,8 @@ interface TickerAllData {
   incQ: FMPIncomeStatement | null;
   incQPrev: FMPIncomeStatement | null;
   cf: FMPCashFlowStatement | null;
-  est: FMPAnalystEstimate[];
-  pt: FMPPriceTargetConsensus | null;
-  price: number | null; // derived from P/E * EPS or null
+  research: ResearchData | null; // Yahoo: analyst targets + forward EPS estimates
+  price: number | null; // live quote price
 }
 
 function computeVerdicts(symbols: string[], allData: TickerAllData[]) {
@@ -262,22 +260,22 @@ function computeVerdicts(symbols: string[], allData: TickerAllData[]) {
   );
   score(
     allData.map((d) => {
-      const cy = d.est[0]?.estimatedEpsAvg;
-      const ny = d.est[1]?.estimatedEpsAvg;
+      const cy = d.research?.epsTrend.currentYear?.avgEps;
+      const ny = d.research?.epsTrend.nextYear?.avgEps;
       return cy && ny && cy !== 0 ? (ny - cy) / Math.abs(cy) : null;
     }),
     true,
     'Growth'
   );
-  score(allData.map((d) => d.est[0]?.estimatedRevenueAvg), true, 'Growth');
+  score(allData.map((d) => d.research?.revenueGrowth), true, 'Growth');
 
   // Analyst (3)
-  score(allData.map((d) => d.est[0]?.numberAnalystsEstimatedEps), true, 'Analyst');
-  score(allData.map((d) => d.est[0]?.estimatedEpsAvg), true, 'Analyst');
+  score(allData.map((d) => d.research?.numberOfAnalystOpinions), true, 'Analyst');
+  score(allData.map((d) => d.research?.epsTrend.currentYear?.avgEps), true, 'Analyst');
   score(
     allData.map((d) => {
-      if (!d.pt?.targetConsensus || !d.price) return null;
-      return (d.pt.targetConsensus - d.price) / d.price;
+      if (!d.research?.targetMeanPrice || !d.price) return null;
+      return (d.research.targetMeanPrice - d.price) / d.price;
     }),
     true,
     'Analyst'
@@ -348,22 +346,20 @@ export function ProfitabilityCompare() {
     })),
   });
 
-  const analystQ = useQueries({
+  // Analyst targets + forward EPS estimates from Yahoo (free, keyless)
+  const researchQ = useQueries({
     queries: symbols.map((sym) => ({
-      queryKey: ['analyst-est-a3', sym],
-      queryFn: () => fetchAnalystEstimatesFMP(sym, 'annual'),
-      enabled: hasFmpKey,
+      queryKey: ['pc-research', sym],
+      queryFn: () => fetchResearch(sym),
       staleTime: 30 * 60 * 1000,
     })),
   });
 
-  const priceTargetQ = useQueries({
-    queries: symbols.map((sym) => ({
-      queryKey: ['price-target', sym],
-      queryFn: () => fetchPriceTargetConsensusFMP(sym),
-      enabled: hasFmpKey,
-      staleTime: 60 * 60 * 1000,
-    })),
+  const quotesQ = useQuery({
+    queryKey: ['pc-quotes', symbols.join(',')],
+    queryFn: () => fetchBatchQuotes(symbols),
+    enabled: symbols.length > 0,
+    staleTime: 60 * 1000,
   });
 
   const isLoading =
@@ -373,23 +369,17 @@ export function ProfitabilityCompare() {
 
   // ─── Build data arrays ───────────────────────────────────────────────────────
 
-  const allData: TickerAllData[] = symbols.map((_, i) => {
+  const allData: TickerAllData[] = symbols.map((sym, i) => {
     const r = ratioQ[i]?.data?.[0] ?? null;
     const m = metricQ[i]?.data?.[0] ?? null;
     const incomeArr = incomeQQ[i]?.data ?? [];
     const incQ = incomeArr[0] ?? null;
     const incQPrev = incomeArr[1] ?? null;
     const cf = cashFlowQ[i]?.data?.[0] ?? null;
-    const est = analystQ[i]?.data ?? [];
-    const pt = priceTargetQ[i]?.data ?? null;
+    const research = researchQ[i]?.data ?? null;
+    const price = quotesQ.data?.find((q) => q.symbol === sym)?.price ?? null;
 
-    // Estimate current price from P/E × EPS if possible
-    const price =
-      r?.priceEarningsRatio && incQ?.epsDiluted
-        ? r.priceEarningsRatio * incQ.epsDiluted
-        : null;
-
-    return { r, m, incQ, incQPrev, cf, est, pt, price };
+    return { r, m, incQ, incQPrev, cf, research, price };
   });
 
   const verdicts = !isLoading && symbols.length > 1
@@ -439,9 +429,9 @@ export function ProfitabilityCompare() {
     ));
 
     rows.push(['ANALYST CONSENSUS']);
-    addRow('EPS Estimate (CY)', symbols.map((_, i) => fmt(allData[i].est[0]?.estimatedEpsAvg, 2)));
-    addRow('Analyst Count', symbols.map((_, i) => String(allData[i].est[0]?.numberAnalystsEstimatedEps ?? '—')));
-    addRow('Price Target', symbols.map((_, i) => allData[i].pt?.targetConsensus ? `$${allData[i].pt!.targetConsensus!.toFixed(2)}` : '—'));
+    addRow('EPS Estimate (CY)', symbols.map((_, i) => fmt(allData[i].research?.epsTrend.currentYear?.avgEps, 2)));
+    addRow('Analyst Count', symbols.map((_, i) => String(allData[i].research?.numberOfAnalystOpinions ?? '—')));
+    addRow('Price Target', symbols.map((_, i) => allData[i].research?.targetMeanPrice ? `$${allData[i].research!.targetMeanPrice!.toFixed(2)}` : '—'));
 
     const csv = rows.map((r) => r.map((v) => `"${v}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -490,12 +480,7 @@ export function ProfitabilityCompare() {
         )}
       </div>
 
-      {!hasFmpKey && (
-        <div className="bg-amber-900/30 border border-amber-700/40 rounded-lg p-4 text-center">
-          <p className="text-sm text-amber-300 mb-1">FMP API Key Required</p>
-          <p className="text-xs text-text-muted">Add your free FMP key in Settings</p>
-        </div>
-      )}
+      {!hasFmpKey && <KeyRequiredCard provider="fmp" feature="Profitability Compare" />}
 
       {isLoading && (
         <div className="space-y-2">
@@ -664,35 +649,33 @@ export function ProfitabilityCompare() {
               <SectionHeader label="Analyst Consensus" colCount={colCount} />
               <MetricRow
                 label="EPS Est. (CY)"
-                values={symbols.map((_, i) =>
-                  allData[i].est[0]?.estimatedEpsAvg != null
-                    ? `$${allData[i].est[0].estimatedEpsAvg.toFixed(2)}`
-                    : '—'
-                )}
-                highlightIdx={wIdx(allData.map((d) => d.est[0]?.estimatedEpsAvg), true)}
+                values={symbols.map((_, i) => {
+                  const v = allData[i].research?.epsTrend.currentYear?.avgEps;
+                  return v != null ? `$${v.toFixed(2)}` : '—';
+                })}
+                highlightIdx={wIdx(allData.map((d) => d.research?.epsTrend.currentYear?.avgEps), true)}
               />
               <MetricRow
                 label="EPS Est. (NY)"
-                values={symbols.map((_, i) =>
-                  allData[i].est[1]?.estimatedEpsAvg != null
-                    ? `$${allData[i].est[1].estimatedEpsAvg.toFixed(2)}`
-                    : '—'
-                )}
-                highlightIdx={wIdx(allData.map((d) => d.est[1]?.estimatedEpsAvg), true)}
+                values={symbols.map((_, i) => {
+                  const v = allData[i].research?.epsTrend.nextYear?.avgEps;
+                  return v != null ? `$${v.toFixed(2)}` : '—';
+                })}
+                highlightIdx={wIdx(allData.map((d) => d.research?.epsTrend.nextYear?.avgEps), true)}
               />
               <MetricRow
                 label="FWD EPS Growth"
                 values={symbols.map((_, i) => {
-                  const cy = allData[i].est[0]?.estimatedEpsAvg;
-                  const ny = allData[i].est[1]?.estimatedEpsAvg;
+                  const cy = allData[i].research?.epsTrend.currentYear?.avgEps;
+                  const ny = allData[i].research?.epsTrend.nextYear?.avgEps;
                   return cy && ny && cy !== 0
                     ? (((ny - cy) / Math.abs(cy)) * 100).toFixed(1) + '%'
                     : '—';
                 })}
                 highlightIdx={wIdx(
                   allData.map((d) => {
-                    const cy = d.est[0]?.estimatedEpsAvg;
-                    const ny = d.est[1]?.estimatedEpsAvg;
+                    const cy = d.research?.epsTrend.currentYear?.avgEps;
+                    const ny = d.research?.epsTrend.nextYear?.avgEps;
                     return cy && ny && cy !== 0 ? (ny - cy) / Math.abs(cy) : null;
                   }),
                   true
@@ -701,19 +684,35 @@ export function ProfitabilityCompare() {
               <MetricRow
                 label="Analyst Count"
                 values={symbols.map((_, i) =>
-                  String(allData[i].est[0]?.numberAnalystsEstimatedEps ?? '—')
+                  String(allData[i].research?.numberOfAnalystOpinions ?? '—')
                 )}
                 highlightIdx={wIdx(
-                  allData.map((d) => d.est[0]?.numberAnalystsEstimatedEps),
+                  allData.map((d) => d.research?.numberOfAnalystOpinions),
                   true
                 )}
               />
               <MetricRow
                 label="Price Target"
                 values={symbols.map((_, i) =>
-                  allData[i].pt?.targetConsensus
-                    ? `$${allData[i].pt!.targetConsensus!.toFixed(2)}`
+                  allData[i].research?.targetMeanPrice
+                    ? `$${allData[i].research!.targetMeanPrice!.toFixed(2)}`
                     : '—'
+                )}
+              />
+              <MetricRow
+                label="Target Upside"
+                values={symbols.map((_, i) => {
+                  const t = allData[i].research?.targetMeanPrice;
+                  const p = allData[i].price;
+                  return t && p ? (((t - p) / p) * 100).toFixed(1) + '%' : '—';
+                })}
+                highlightIdx={wIdx(
+                  allData.map((d) =>
+                    d.research?.targetMeanPrice && d.price
+                      ? (d.research.targetMeanPrice - d.price) / d.price
+                      : null
+                  ),
+                  true
                 )}
               />
             </tbody>

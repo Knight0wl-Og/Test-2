@@ -2,20 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import clsx from 'clsx';
-import { fetchBatchQuotes } from '../services/api';
+import { fetchScreener } from '../services/api';
+import { ErrorState } from '../components/common/ErrorState';
 import { useWatchlistStore } from '../store/watchlistStore';
 import type { Quote } from '../types';
-
-const TICKER_UNIVERSE = [
-  'AAPL','MSFT','NVDA','GOOGL','META','AMZN','TSLA','AMD','AVGO','ORCL',
-  'CRM','ADBE','INTC','NFLX','PYPL','SQ','COIN','PLTR','ARM','SNOW',
-  'GS','JPM','BAC','WFC','V','MA','AXP','BLK','C','MS',
-  'UNH','JNJ','PFE','ABBV','MRK','LLY','CVS','AMGN',
-  'CVX','XOM','COP','SLB','OXY',
-  'NEE','DUK','SO',
-  'BA','CAT','GE','HON','UPS','FDX','LMT','RTX',
-  'COST','WMT','TGT','HD','LOW','NKE','MCD','SBUX','DIS','CMCSA',
-];
 
 function fmt(n: number, d = 2) {
   return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -68,9 +58,16 @@ export function TopMovers() {
   const navigate = useNavigate();
   const selectSymbol = useWatchlistStore((s) => s.selectSymbol);
 
-  const { data: quotes = [], isLoading } = useQuery<Quote[]>({
-    queryKey: ['topMovers'],
-    queryFn: () => fetchBatchQuotes(TICKER_UNIVERSE),
+  // Real market-wide movers from Yahoo's predefined screeners
+  const gainersQ = useQuery<Quote[]>({
+    queryKey: ['screener', 'day_gainers', 10],
+    queryFn: () => fetchScreener('day_gainers', 10),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+  const losersQ = useQuery<Quote[]>({
+    queryKey: ['screener', 'day_losers', 10],
+    queryFn: () => fetchScreener('day_losers', 10),
     staleTime: 60_000,
     refetchInterval: 60_000,
   });
@@ -80,16 +77,15 @@ export function TopMovers() {
     navigate('/');
   }
 
-  const sorted = [...quotes].sort((a, b) => b.changePercent - a.changePercent);
-  const gainers = sorted.filter((q) => q.changePercent > 0).slice(0, 10);
-  const losers = [...sorted].reverse().filter((q) => q.changePercent < 0).slice(0, 10);
+  const gainers = gainersQ.data ?? [];
+  const losers = losersQ.data ?? [];
 
   return (
     <div className="p-4 space-y-6 min-h-full">
       <div className="flex items-center gap-2">
         <TrendingUp className="w-5 h-5 text-accent" />
         <h1 className="text-base font-bold text-white">Top Movers</h1>
-        <span className="text-xs text-text-muted">· refreshes every 60s</span>
+        <span className="text-xs text-text-muted">· market-wide · refreshes every 60s</span>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -99,8 +95,16 @@ export function TopMovers() {
             <TrendingUp className="w-4 h-4 text-green" />
             <span className="text-xs font-semibold text-green uppercase tracking-widest">Top Gainers</span>
           </div>
-          {isLoading ? (
+          {gainersQ.isLoading ? (
             <SkeletonRows count={10} />
+          ) : gainersQ.error ? (
+            <div className="p-4">
+              <ErrorState
+                title="Failed to load gainers"
+                message={gainersQ.error instanceof Error ? gainersQ.error.message : undefined}
+                onRetry={() => gainersQ.refetch()}
+              />
+            </div>
           ) : gainers.length === 0 ? (
             <p className="px-4 py-6 text-sm text-text-muted text-center">No gainers yet</p>
           ) : (
@@ -116,8 +120,16 @@ export function TopMovers() {
             <TrendingDown className="w-4 h-4 text-red" />
             <span className="text-xs font-semibold text-red uppercase tracking-widest">Top Losers</span>
           </div>
-          {isLoading ? (
+          {losersQ.isLoading ? (
             <SkeletonRows count={10} />
+          ) : losersQ.error ? (
+            <div className="p-4">
+              <ErrorState
+                title="Failed to load losers"
+                message={losersQ.error instanceof Error ? losersQ.error.message : undefined}
+                onRetry={() => losersQ.refetch()}
+              />
+            </div>
           ) : losers.length === 0 ? (
             <p className="px-4 py-6 text-sm text-text-muted text-center">No losers yet</p>
           ) : (

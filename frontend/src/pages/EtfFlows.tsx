@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Zap } from 'lucide-react';
-import { fetchEtfHoldersFMP, getFmpKey } from '../services/fmpService';
+import { fetchEtfHoldersFMP, getFmpKey, FmpUpgradeRequiredError } from '../services/fmpService';
+import { ErrorState } from '../components/common/ErrorState';
+import { KeyRequiredCard } from '../components/common/KeyRequiredCard';
 import clsx from 'clsx';
 
 const POPULAR_ETFS = ['SPY', 'QQQ', 'IWM', 'DIA', 'VTI', 'ARKK', 'XLK', 'XLF'];
@@ -69,12 +71,7 @@ export function EtfFlows() {
         ))}
       </div>
 
-      {!hasFmpKey && (
-        <div className="bg-amber-900/30 border border-amber-700/40 rounded-lg p-4 text-center">
-          <p className="text-sm text-amber-300 mb-1">FMP API Key Required</p>
-          <p className="text-xs text-text-muted">Add your free FMP key in Settings</p>
-        </div>
-      )}
+      {!hasFmpKey && <KeyRequiredCard provider="fmp" feature="ETF Flows" />}
 
       {isLoading && (
         <div className="space-y-2">
@@ -84,10 +81,15 @@ export function EtfFlows() {
         </div>
       )}
 
-      {error && (
-        <div className="bg-red-900/30 border border-red-700/40 rounded-lg p-4 text-sm text-red-300">
-          {error instanceof Error ? error.message : 'Failed to load'}
-        </div>
+      {error != null && (
+        error instanceof FmpUpgradeRequiredError ? (
+          <KeyRequiredCard provider="fmp" reason="paid-plan" feature="ETF Flows" />
+        ) : (
+          <ErrorState
+            title="Failed to load ETF holdings"
+            message={error instanceof Error ? error.message : undefined}
+          />
+        )
       )}
 
       {holders.length > 0 && (

@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, PlusCircle, Download } from 'lucide-react';
-import { fetchBatchQuotes } from '../services/api';
-import { fetchAnalystEstimatesFMP, getFmpKey } from '../services/fmpService';
+import { fetchBatchQuotes, fetchResearch } from '../services/api';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -42,7 +41,6 @@ export function EpsValuation() {
   const [showAdd, setShowAdd] = useState(false);
   // EPS overrides: { TICKER: { cy?: '12.34', ny?: '14.00', fy?: '' } }
   const [epsOverrides, setEpsOverrides] = useState<Record<string, Partial<Record<EpsField, string>>>>({});
-  const hasFmpKey = !!getFmpKey();
   const qc = useQueryClient();
 
   function handleGenerate(e: React.FormEvent) {
@@ -87,35 +85,29 @@ export function EpsValuation() {
     staleTime: 60_000,
   });
 
+  // Forward EPS estimates come free from Yahoo's earningsTrend (via fetchResearch)
   const estimateQueries = useQueries({
     queries: tickers.map((t) => ({
-      queryKey: ['eps-est-annual', t],
-      queryFn: () => fetchAnalystEstimatesFMP(t, 'annual'),
-      enabled: hasFmpKey && !!t,
+      queryKey: ['eps-research', t],
+      queryFn: () => fetchResearch(t),
+      enabled: !!t,
       staleTime: 30 * 60_000,
     })),
   });
 
   // ─── Build rows ─────────────────────────────────────────────────────────────
 
-  function getYear(d: string) {
-    return new Date(d + 'T12:00:00').getFullYear();
-  }
-
   const rows = tickers.map((ticker, i) => {
     const quote = quotesQuery.data?.find((q) => q.symbol === ticker);
-    const ests = estimateQueries[i]?.data ?? [];
-
-    const cyEst = ests.find((e) => getYear(e.date) === CURRENT_YEAR);
-    const nyEst = ests.find((e) => getYear(e.date) === CURRENT_YEAR + 1);
-    const fyEst = ests.find((e) => getYear(e.date) === CURRENT_YEAR + 2);
+    const epsTrend = estimateQueries[i]?.data?.epsTrend;
 
     const over = epsOverrides[ticker] ?? {};
 
-    // Base values from API
-    const cyBase = cyEst?.estimatedEpsAvg ?? null;
-    const nyBase = nyEst?.estimatedEpsAvg ?? null;
-    const fyBase = fyEst?.estimatedEpsAvg ?? null;
+    // Base values from Yahoo earningsTrend. Yahoo publishes current-year and
+    // next-year estimates only — the CY+2 cell stays blank and user-editable.
+    const cyBase = epsTrend?.currentYear?.avgEps ?? null;
+    const nyBase = epsTrend?.nextYear?.avgEps ?? null;
+    const fyBase: number | null = null;
 
     // Effective values (override takes precedence)
     const resolve = (field: EpsField, base: number | null): number | null => {
@@ -141,7 +133,7 @@ export function EpsValuation() {
     // Display values in inputs
     const cyDisplay = over.cy !== undefined ? over.cy : (cyBase?.toFixed(2) ?? '');
     const nyDisplay = over.ny !== undefined ? over.ny : (nyBase?.toFixed(2) ?? '');
-    const fyDisplay = over.fy !== undefined ? over.fy : (fyBase?.toFixed(2) ?? '');
+    const fyDisplay = over.fy !== undefined ? over.fy : '';
 
     return {
       ticker,
@@ -216,12 +208,6 @@ export function EpsValuation() {
           Generate
         </button>
       </form>
-
-      {!hasFmpKey && (
-        <div className="bg-amber-900/30 border border-amber-700/40 rounded-lg p-4 text-sm text-amber-300">
-          FMP API key required — add it in Settings to fetch EPS estimates
-        </div>
-      )}
 
       {/* Table */}
       {tickers.length > 0 && (
@@ -340,7 +326,8 @@ export function EpsValuation() {
 
           {/* Hint row */}
           <div className="px-4 py-2 bg-[#0d1030] border-t border-border-dim/30 text-[10px] text-text-muted/60">
-            ✎ EPS cells are editable — type to override analyst estimates and recalculate P/E instantly
+            ✎ EPS cells are editable — type to override analyst estimates and recalculate P/E instantly.
+            {' '}{CURRENT_YEAR + 2} estimates aren't published by Yahoo — enter them manually.
           </div>
         </div>
       )}

@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart2 } from 'lucide-react';
 import { useWatchlistStore } from '../store/watchlistStore';
-import { fetchEarningsHistoryFMP, fetchAnalystEstimatesFMP, getFmpKey } from '../services/fmpService';
+import { fetchEarningsCalendar, hasFinnhubKey } from '../services/finnhubService';
+import { ErrorState } from '../components/common/ErrorState';
+import { EmptyState } from '../components/common/EmptyState';
+import { LoadingState } from '../components/common/LoadingState';
+import { KeyRequiredCard } from '../components/common/KeyRequiredCard';
 import clsx from 'clsx';
 
 function fmtEps(v: number | null) {
@@ -14,32 +18,30 @@ export function EarningsPredictor() {
   const storeSymbol = useWatchlistStore((s) => s.selectedSymbol);
   const [input, setInput] = useState(storeSymbol ?? 'AAPL');
   const [symbol, setSymbol] = useState(storeSymbol ?? 'AAPL');
-  const hasFmpKey = !!getFmpKey();
+  const finnhubReady = hasFinnhubKey();
 
-  const histQuery = useQuery({
-    queryKey: ['earnings-history', symbol],
-    queryFn: () => fetchEarningsHistoryFMP(symbol, 8),
-    enabled: hasFmpKey && !!symbol,
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['fh-earnings', symbol],
+    queryFn: () => fetchEarningsCalendar(symbol),
+    enabled: finnhubReady && !!symbol,
     staleTime: 30 * 60 * 1000,
   });
 
-  const estQuery = useQuery({
-    queryKey: ['analyst-estimates', symbol],
-    queryFn: () => fetchAnalystEstimatesFMP(symbol, 'quarter'),
-    enabled: hasFmpKey && !!symbol,
-    staleTime: 30 * 60 * 1000,
-  });
+  const entries = data ?? [];
+  const today = new Date().toISOString().slice(0, 10);
 
-  const history = histQuery.data ?? [];
-  const nextEst = estQuery.data?.[0];
+  // Past quarters with reported EPS — most recent 8, oldest first for the chart
+  const history = entries.filter((e) => e.epsActual != null).slice(-8);
+  // Next upcoming report (estimate only)
+  const nextEst = entries.find((e) => e.date >= today && e.epsActual == null);
 
   // Calculate beat rate
-  const valid = history.filter((h) => h.eps != null && h.epsEstimated != null);
-  const beats = valid.filter((h) => (h.eps ?? 0) > (h.epsEstimated ?? 0));
+  const valid = history.filter((h) => h.epsActual != null && h.epsEstimate != null);
+  const beats = valid.filter((h) => (h.epsActual ?? 0) > (h.epsEstimate ?? 0));
   const beatRate = valid.length > 0 ? `${beats.length}/${valid.length}` : '—';
 
   // Chart bar max value
-  const allVals = history.flatMap((h) => [Math.abs(h.eps ?? 0), Math.abs(h.epsEstimated ?? 0)]).filter(Boolean);
+  const allVals = history.flatMap((h) => [Math.abs(h.epsActual ?? 0), Math.abs(h.epsEstimate ?? 0)]).filter(Boolean);
   const maxVal = allVals.length > 0 ? Math.max(...allVals) : 1;
 
   return (
@@ -69,25 +71,20 @@ export function EarningsPredictor() {
         </button>
       </form>
 
-      {!hasFmpKey && (
-        <div className="bg-amber-900/30 border border-amber-700/40 rounded-lg p-4 text-center">
-          <p className="text-sm text-amber-300 mb-1">FMP API Key Required</p>
-          <p className="text-xs text-text-muted">Add your free FMP key in Settings</p>
-        </div>
+      {!finnhubReady && <KeyRequiredCard provider="finnhub" feature="Earnings Predictor" />}
+
+      {isLoading && <LoadingState rows={4} />}
+
+      {error != null && (
+        <ErrorState
+          title="Failed to load earnings history"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
+        />
       )}
 
-      {(histQuery.isLoading || estQuery.isLoading) && (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-10 bg-bg-card rounded animate-pulse" />
-          ))}
-        </div>
-      )}
-
-      {histQuery.error && (
-        <div className="bg-red-900/30 border border-red-700/40 rounded-lg p-4 text-sm text-red-300">
-          {histQuery.error instanceof Error ? histQuery.error.message : 'Failed to load'}
-        </div>
+      {finnhubReady && !isLoading && !error && entries.length === 0 && (
+        <EmptyState icon={BarChart2} title="No earnings data" message={`No reported or scheduled earnings found for ${symbol}`} />
       )}
 
       {/* Summary stats */}
@@ -101,7 +98,7 @@ export function EarningsPredictor() {
             <div className="bg-bg-card border border-border-dim rounded-lg p-3 text-center">
               <p className="text-[10px] text-text-muted mb-1">Next Est.</p>
               <p className="text-base font-bold text-accent">
-                {nextEst ? (fmtEps(nextEst.estimatedEpsAvg) ?? '—') : '—'}
+                {nextEst ? (fmtEps(nextEst.epsEstimate) ?? '—') : '—'}
               </p>
             </div>
             <div className="bg-bg-card border border-border-dim rounded-lg p-3 text-center">
@@ -115,11 +112,11 @@ export function EarningsPredictor() {
           </div>
 
           {/* EPS bar chart */}
-          <p className="text-[11px] text-text-muted uppercase tracking-wider mb-3">EPS History — 8 Quarters</p>
+          <p className="text-[11px] text-text-muted uppercase tracking-wider mb-3">EPS History — {history.length} Quarters</p>
           <div className="space-y-3">
             {[...history].reverse().map((h, i) => {
-              const actual = h.eps;
-              const est = h.epsEstimated;
+              const actual = h.epsActual;
+              const est = h.epsEstimate;
               const beat = actual != null && est != null && actual > est;
               const miss = actual != null && est != null && actual < est;
               const actPct = actual != null ? (Math.abs(actual) / maxVal) * 100 : 0;

@@ -1,8 +1,12 @@
-import { useState } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Activity } from 'lucide-react';
 import { useWatchlistStore } from '../store/watchlistStore';
-import { fetchTechnicalIndicatorFMP, getFmpKey } from '../services/fmpService';
+import { fetchHistory } from '../services/api';
+import { computeTechnicalSnapshot } from '../utils/indicators';
+import { ErrorState } from '../components/common/ErrorState';
+import { EmptyState } from '../components/common/EmptyState';
+import { LoadingState } from '../components/common/LoadingState';
 import clsx from 'clsx';
 
 function RsiGauge({ rsi }: { rsi: number }) {
@@ -61,29 +65,26 @@ export function Technicals() {
   const storeSymbol = useWatchlistStore((s) => s.selectedSymbol);
   const [input, setInput] = useState(storeSymbol ?? 'AAPL');
   const [symbol, setSymbol] = useState(storeSymbol ?? 'AAPL');
-  const hasFmpKey = !!getFmpKey();
 
-  const [rsiQ, ema20Q, ema50Q, ema200Q, macdQ] = useQueries({
-    queries: [
-      { queryKey: ['ti-rsi', symbol], queryFn: () => fetchTechnicalIndicatorFMP(symbol, 'rsi', 14), enabled: hasFmpKey && !!symbol, staleTime: 5 * 60 * 1000 },
-      { queryKey: ['ti-ema20', symbol], queryFn: () => fetchTechnicalIndicatorFMP(symbol, 'ema', 20), enabled: hasFmpKey && !!symbol, staleTime: 5 * 60 * 1000 },
-      { queryKey: ['ti-ema50', symbol], queryFn: () => fetchTechnicalIndicatorFMP(symbol, 'ema', 50), enabled: hasFmpKey && !!symbol, staleTime: 5 * 60 * 1000 },
-      { queryKey: ['ti-ema200', symbol], queryFn: () => fetchTechnicalIndicatorFMP(symbol, 'ema', 200), enabled: hasFmpKey && !!symbol, staleTime: 5 * 60 * 1000 },
-      { queryKey: ['ti-macd', symbol], queryFn: () => fetchTechnicalIndicatorFMP(symbol, 'macd', 12), enabled: hasFmpKey && !!symbol, staleTime: 5 * 60 * 1000 },
-    ],
+  // Indicators are computed locally from 2 years of daily history —
+  // no API key needed (data comes from Yahoo/Schwab like the charts).
+  const { data: bars, isLoading, error, refetch } = useQuery({
+    queryKey: ['tech-history', symbol],
+    queryFn: () => fetchHistory(symbol, '2y', '1d'),
+    enabled: !!symbol,
+    staleTime: 5 * 60 * 1000,
   });
 
-  const isLoading = [rsiQ, ema20Q, ema50Q, ema200Q, macdQ].some((q) => q.isLoading);
-  const error = [rsiQ, ema20Q, ema50Q, ema200Q, macdQ].find((q) => q.error)?.error;
+  const snap = useMemo(() => (bars ? computeTechnicalSnapshot(bars) : null), [bars]);
 
-  const rsi = rsiQ.data?.[0]?.rsi;
-  const price = ema20Q.data?.[0]?.close;
-  const ema20 = ema20Q.data?.[0]?.ema;
-  const ema50 = ema50Q.data?.[0]?.ema;
-  const ema200 = ema200Q.data?.[0]?.ema;
-  const macdVal = macdQ.data?.[0]?.macd;
-  const signalVal = macdQ.data?.[0]?.signal;
-  const histogramVal = macdQ.data?.[0]?.histogram;
+  const rsi = snap?.rsi14;
+  const price = snap?.price;
+  const ema20 = snap?.ema20;
+  const ema50 = snap?.ema50;
+  const ema200 = snap?.ema200;
+  const macdVal = snap?.macd.macd;
+  const signalVal = snap?.macd.signal;
+  const histogramVal = snap?.macd.histogram;
 
   // Signals
   const priceVsEma20: 'bullish' | 'bearish' | 'neutral' = price && ema20 ? price > ema20 ? 'bullish' : 'bearish' : 'neutral';
@@ -121,28 +122,25 @@ export function Technicals() {
         </button>
       </form>
 
-      {!hasFmpKey && (
-        <div className="bg-amber-900/30 border border-amber-700/40 rounded-lg p-4 text-center">
-          <p className="text-sm text-amber-300 mb-1">FMP API Key Required</p>
-          <p className="text-xs text-text-muted">Add your free FMP key in Settings</p>
-        </div>
+      {isLoading && <LoadingState rows={5} />}
+
+      {error != null && (
+        <ErrorState
+          title="Failed to load price history"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
+        />
       )}
 
-      {isLoading && (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 bg-bg-card rounded animate-pulse" />
-          ))}
-        </div>
+      {!isLoading && !error && !snap && (
+        <EmptyState
+          icon={Activity}
+          title="Not enough price history"
+          message={`Need at least 30 daily bars to compute indicators for ${symbol}`}
+        />
       )}
 
-      {error && (
-        <div className="bg-red-900/30 border border-red-700/40 rounded-lg p-4 text-sm text-red-300">
-          {error instanceof Error ? error.message : 'Failed to load'}
-        </div>
-      )}
-
-      {!isLoading && rsi != null && (
+      {!isLoading && snap && rsi != null && (
         <>
           {/* Consensus */}
           <div className="bg-bg-card border border-border-dim rounded-xl p-4 mb-4 text-center">

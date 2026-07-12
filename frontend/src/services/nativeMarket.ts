@@ -53,25 +53,14 @@ function parseMeta(meta: Record<string, unknown>, symbol: string): Quote {
   };
 }
 
-function blankQuote(symbol: string): Quote {
-  return {
-    symbol, shortName: symbol, price: 0, change: 0, changePercent: 0,
-    volume: 0, avgVolume: 0, marketCap: null,
-    open: 0, high: 0, low: 0, previousClose: 0,
-    fiftyTwoWeekHigh: 0, fiftyTwoWeekLow: 0,
-    pe: null, eps: null, marketState: 'CLOSED', currency: 'USD',
-  };
-}
-
+// Errors propagate to react-query so the UI can show a real error state
+// instead of rendering fake $0.00 quotes. Batch callers use allSettled and
+// simply drop failed symbols.
 export async function fetchQuoteNative(symbol: string): Promise<Quote> {
-  try {
-    const data = await yfGet(symbol, { interval: '1d', range: '1d', includePrePost: 'false' });
-    const result = (data as any)?.chart?.result?.[0];
-    if (!result) return blankQuote(symbol);
-    return parseMeta(result.meta, symbol);
-  } catch {
-    return blankQuote(symbol);
-  }
+  const data = await yfGet(symbol, { interval: '1d', range: '1d', includePrePost: 'false' });
+  const result = (data as any)?.chart?.result?.[0];
+  if (!result) throw new Error(`No quote data for ${symbol}`);
+  return parseMeta(result.meta, symbol);
 }
 
 export async function fetchBatchQuotesNative(symbols: string[]): Promise<Quote[]> {
@@ -99,27 +88,23 @@ export async function fetchHistoryNative(
   period = '3mo',
   interval = '1d'
 ): Promise<OHLCVBar[]> {
-  try {
-    const period1 = periodToTimestamp(period);
-    const period2 = String(Math.floor(Date.now() / 1000));
-    const data = await yfGet(symbol, { period1, period2, interval, includePrePost: 'false' });
-    const result = (data as any)?.chart?.result?.[0];
-    if (!result) return [];
-    const timestamps: number[] = result.timestamp ?? [];
-    const q = result.indicators?.quote?.[0] ?? {};
-    return timestamps
-      .map((t, i) => ({
-        time: t,
-        open: q.open?.[i] ?? 0,
-        high: q.high?.[i] ?? 0,
-        low: q.low?.[i] ?? 0,
-        close: q.close?.[i] ?? 0,
-        volume: q.volume?.[i] ?? 0,
-      }))
-      .filter((b) => b.open !== 0 && b.close !== 0);
-  } catch {
-    return [];
-  }
+  const period1 = periodToTimestamp(period);
+  const period2 = String(Math.floor(Date.now() / 1000));
+  const data = await yfGet(symbol, { period1, period2, interval, includePrePost: 'false' });
+  const result = (data as any)?.chart?.result?.[0];
+  if (!result) throw new Error(`No price history for ${symbol}`);
+  const timestamps: number[] = result.timestamp ?? [];
+  const q = result.indicators?.quote?.[0] ?? {};
+  return timestamps
+    .map((t, i) => ({
+      time: t,
+      open: q.open?.[i] ?? 0,
+      high: q.high?.[i] ?? 0,
+      low: q.low?.[i] ?? 0,
+      close: q.close?.[i] ?? 0,
+      volume: q.volume?.[i] ?? 0,
+    }))
+    .filter((b) => b.open !== 0 && b.close !== 0);
 }
 
 export async function fetchIndicesNative(): Promise<Quote[]> {
