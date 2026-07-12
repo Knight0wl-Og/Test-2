@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { cached } from '../cache/redis';
 import { getBatchQuotes, isMarketOpen } from '../services/yahooFinance';
+import { yahooAuthGet } from '../services/yahooCrumb';
 import { getMockFearGreed } from '../services/mockData';
 
 const router = Router();
@@ -167,6 +168,36 @@ router.get('/screener', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/market/summary/:symbol?modules=institutionOwnership,majorHoldersBreakdown
+// Raw quoteSummary passthrough (crumb-authenticated) for module combinations
+// the dedicated /research route doesn't cover.
+const SUMMARY_MODULES = new Set([
+  'institutionOwnership', 'majorHoldersBreakdown', 'insiderHolders',
+  'summaryDetail', 'financialData', 'defaultKeyStatistics',
+  'recommendationTrend', 'earningsTrend', 'assetProfile',
+]);
+
+router.get('/summary/:symbol', async (req: Request, res: Response) => {
+  const { symbol } = req.params;
+  const modules = String(req.query.modules ?? '')
+    .split(',')
+    .map((m) => m.trim())
+    .filter((m) => SUMMARY_MODULES.has(m));
+  if (!modules.length) {
+    res.status(400).json({ error: 'No valid modules requested' });
+    return;
+  }
+  try {
+    const data = await cached(`market:summary:${symbol}:${modules.join(',')}`, 300, async () => {
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules.join(',')}`;
+      return yahooAuthGet(url);
+    });
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/market/research/:symbol
 // NOTE: keep the response shape in sync with frontend/src/services/nativeResearch.ts
 router.get('/research/:symbol', async (req: Request, res: Response) => {
@@ -174,16 +205,11 @@ router.get('/research/:symbol', async (req: Request, res: Response) => {
   try {
     // v2 cache key: shape extended with earningsTrend/targets/dividendYield in v4.0
     const data = await cached(`market:research:v2:${symbol}`, 300, async () => {
+      // quoteSummary requires Yahoo cookie+crumb auth
       const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,financialData,recommendationTrend,assetProfile,defaultKeyStatistics,earningsTrend`;
-      const r = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          Accept: 'application/json',
-        },
-        timeout: 10000,
-      });
+      const body = await yahooAuthGet(url);
 
-      const result = r.data?.quoteSummary?.result?.[0];
+      const result = body?.quoteSummary?.result?.[0];
       if (!result) throw new Error('No data');
 
       const profile = result.assetProfile ?? {};
@@ -257,15 +283,10 @@ router.get('/options/:symbol', async (req: Request, res: Response) => {
     let url = `https://query1.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}`;
     if (date) url += `?date=${date}`;
 
-    const r = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        Accept: 'application/json',
-      },
-      timeout: 10000,
-    });
+    // options endpoint requires Yahoo cookie+crumb auth
+    const body = await yahooAuthGet(url);
 
-    const result = r.data?.optionChain?.result?.[0];
+    const result = body?.optionChain?.result?.[0];
     if (!result) {
       res.status(404).json({ error: 'No options data found' });
       return;

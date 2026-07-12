@@ -1,5 +1,5 @@
-import { CapacitorHttp } from '@capacitor/core';
 import { Capacitor } from '@capacitor/core';
+import { yahooCrumbGet } from './yahooCrumb';
 
 export interface InstitutionalHolder {
   name: string;
@@ -17,18 +17,21 @@ export interface MajorHolders {
   holders: InstitutionalHolder[];
 }
 
-const YF_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-  Accept: 'application/json',
-};
+function getBackendBase(): string {
+  return localStorage.getItem('TRADEEDGE_API_URL') || 'http://localhost:3001';
+}
 
 async function yfSummary(symbol: string, modules: string): Promise<unknown> {
-  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
+  // quoteSummary requires Yahoo cookie+crumb auth
   if (Capacitor.isNativePlatform()) {
-    const res = await CapacitorHttp.get({ url, headers: YF_HEADERS });
-    return res.data;
+    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
+    return yahooCrumbGet(url);
   }
-  const res = await fetch(url, { headers: YF_HEADERS });
+  // Web/Electron: browser fetch can't carry the Yahoo cookie — proxy via backend
+  const res = await fetch(
+    `${getBackendBase()}/api/market/summary/${encodeURIComponent(symbol)}?modules=${encodeURIComponent(modules)}`
+  );
+  if (!res.ok) throw new Error(`Backend returned ${res.status}`);
   return res.json();
 }
 

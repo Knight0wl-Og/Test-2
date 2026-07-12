@@ -1,4 +1,4 @@
-import { CapacitorHttp } from '@capacitor/core';
+import { yahooCrumbGet } from './yahooCrumb';
 
 export interface EpsTrendPeriod {
   endDate: string;
@@ -75,19 +75,11 @@ export function parseEarningsTrend(result: any): EpsTrend {
 }
 
 export async function fetchResearchNative(symbol: string): Promise<ResearchData> {
+  // quoteSummary requires Yahoo cookie+crumb auth (handled by yahooCrumbGet)
   const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,financialData,recommendationTrend,assetProfile,defaultKeyStatistics,earningsTrend`;
+  const data = await yahooCrumbGet(url);
 
-  const res = await CapacitorHttp.get({
-    url,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      Accept: 'application/json',
-    },
-  });
-
-  if (res.status !== 200) throw new Error(`Yahoo Finance returned ${res.status}`);
-
-  const result = res.data?.quoteSummary?.result?.[0];
+  const result = (data as any)?.quoteSummary?.result?.[0];
   if (!result) throw new Error('No data returned');
 
   const profile = result.assetProfile ?? {};

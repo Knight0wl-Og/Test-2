@@ -1,4 +1,4 @@
-import { CapacitorHttp } from '@capacitor/core';
+import { yahooCrumbGet } from './yahooCrumb';
 
 export interface OptionContract {
   strike: number;
@@ -37,20 +37,13 @@ function mapContract(raw: Record<string, unknown>, expDate: number): OptionContr
 }
 
 export async function fetchOptionsNative(symbol: string, expirationDate?: number): Promise<OptionsChain> {
+  // options endpoint requires Yahoo cookie+crumb auth (handled by yahooCrumbGet)
   let url = `https://query1.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}`;
   if (expirationDate) url += `?date=${expirationDate}`;
 
-  const res = await CapacitorHttp.get({
-    url,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      Accept: 'application/json',
-    },
-  });
+  const data = await yahooCrumbGet(url);
 
-  if (res.status !== 200) throw new Error(`Yahoo Finance returned ${res.status}`);
-
-  const result = res.data?.optionChain?.result?.[0];
+  const result = (data as any)?.optionChain?.result?.[0];
   if (!result) throw new Error('No options data returned');
 
   const expDateTs: number = result.options?.[0]?.expirationDate ?? 0;
