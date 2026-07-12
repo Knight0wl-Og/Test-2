@@ -1,5 +1,11 @@
 apply plugin: 'com.android.application'
 
+// versionName comes from the repo-root package.json (single source of truth);
+// versionCode comes from CI (-PversionCode=<run number> / ANDROID_VERSION_CODE)
+// so every release APK is a valid upgrade over the previous one.
+def appPkgJson = new groovy.json.JsonSlurper().parse(rootProject.file('../../package.json'))
+def appVersionCode = (project.findProperty('versionCode') ?: System.getenv('ANDROID_VERSION_CODE') ?: '1').toString().toInteger()
+
 android {
     namespace "com.tradeedge.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +13,8 @@ android {
         applicationId "com.tradeedge.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appPkgJson.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -1,6 +1,6 @@
 {
   "name": "tradeedge",
-  "version": "3.5.13",
+  "version": "4.0.0",
   "private": true,
   "workspaces": [
     "frontend",

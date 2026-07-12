@@ -4,7 +4,7 @@ import './index.css';
 import App from './App';
 import { confirmBundle } from './services/liveUpdate';
 import { syncEarningsWatchlist } from './services/earningsSync';
-import { migrateLocalStorageKeys, restoreKeysToLocalStorage } from './services/keyStorage';
+import { migrateLocalStorageKeys, restoreKeysToLocalStorage, KEY_NAMES } from './services/keyStorage';
 import { Capacitor } from '@capacitor/core';
 
 // Confirm the running bundle is stable (prevents auto-rollback on crash)
@@ -32,10 +32,20 @@ createRoot(document.getElementById('root')!).render(
 
 // Key bootstrap runs in background after React is already mounted.
 // Fire-and-forget: any hang or error here is completely non-fatal.
+// If the async restore brings back keys that weren't in localStorage yet
+// (fresh install over an OTA/persistent store), reload once so pages that
+// checked hasFmpKey()/hasFinnhubKey() at render pick them up.
 (async () => {
   try {
+    const before = new Set(KEY_NAMES.filter((k) => localStorage.getItem(k)));
     await migrateLocalStorageKeys();
     await restoreKeysToLocalStorage();
+    const restored = KEY_NAMES.some((k) => !before.has(k) && localStorage.getItem(k));
+    const GUARD = 'tradeedge_keys_reloaded';
+    if (restored && !sessionStorage.getItem(GUARD)) {
+      sessionStorage.setItem(GUARD, '1');
+      window.location.reload();
+    }
   } catch (e) {
     console.warn('[TradeEdge] Key bootstrap failed (non-fatal):', e);
   }

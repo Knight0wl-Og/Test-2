@@ -1,6 +1,6 @@
 {
   "name": "tradeedge-electron",
-  "version": "3.5.13",
+  "version": "4.0.0",
   "private": true,
   "main": "src/main.js",
   "scripts": {
@@ -25,8 +25,9 @@
     "copyright": "Copyright 2025 TradeEdge",
     "icon": "assets/icon.png",
     "publish": {
-      "provider": "generic",
-      "url": "https://codeberg.org/Knight0wl/TradeEdge/releases/download/latest"
+      "provider": "github",
+      "owner": "Knight0wl-Og",
+      "repo": "Test-2"
     },
     "directories": {
       "output": "out",

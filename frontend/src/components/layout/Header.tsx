@@ -10,6 +10,7 @@ import { loadAlerts, removeAlert, type PriceAlert } from '../../services/alertsS
 import { AddAlertModal } from '../common/AddAlertModal';
 import { getFmpKey } from '../../services/fmpService';
 import { setKey } from '../../services/keyStorage';
+import { APP_VERSION } from '../../version';
 import clsx from 'clsx';
 
 interface HeaderProps {
@@ -369,7 +370,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             Reset watchlists to defaults
           </button>
         </div>
-        <p className="text-xs text-text-muted/50 mt-4 text-center">TradeEdge v3.5.0</p>
+        <p className="text-xs text-text-muted/50 mt-4 text-center">TradeEdge v{APP_VERSION}</p>
       </div>
     </div>
   );
