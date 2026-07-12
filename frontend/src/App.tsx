@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ProLayout } from './components/layout/ProLayout';
 import { ChartWorkspace } from './components/chart/ChartWorkspace';
 import { NewsPanel } from './components/news/NewsPanel';
@@ -58,6 +59,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <ErrorBoundary>
         <ProLayout isChartView>
           <Routes>
             {/* Desktop chart workspace + mobile chart page on same root route */}
@@ -99,6 +101,7 @@ export default function App() {
             <Route path="/technicals" element={<Technicals />} />
           </Routes>
         </ProLayout>
+        </ErrorBoundary>
       </BrowserRouter>
     </QueryClientProvider>
   );

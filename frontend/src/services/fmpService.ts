@@ -3,6 +3,14 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 const LS_KEY = 'tradeedge_fmp_key';
 const FMP_BASE = 'https://financialmodelingprep.com/api';
 
+/** Thrown when FMP returns 403 — the endpoint needs a paid plan. */
+export class FmpUpgradeRequiredError extends Error {
+  constructor() {
+    super('This feature requires a paid FMP plan (free tier does not include this endpoint)');
+    this.name = 'FmpUpgradeRequiredError';
+  }
+}
+
 export function getFmpKey(): string { return localStorage.getItem(LS_KEY) ?? ''; }
 export function setFmpKey(k: string): void {
   if (k.trim()) localStorage.setItem(LS_KEY, k.trim());
@@ -21,7 +29,7 @@ async function fmpFetch<T>(path: string, params: Record<string, string> = {}): P
     const searchParams = new URLSearchParams({ ...params, apikey: key });
     const res = await CapacitorHttp.get({ url: `${FMP_BASE}/${path}?${searchParams}` });
     if (res.status === 401) throw new Error('Invalid FMP API key — check Settings');
-    if (res.status === 403) throw new Error('This feature requires a paid FMP plan (free tier does not include this endpoint)');
+    if (res.status === 403) throw new FmpUpgradeRequiredError();
     if (res.status === 429) throw new Error('FMP rate limit reached — try again in a minute');
     if (res.status !== 200) throw new Error(`FMP error ${res.status}`);
     return res.data as T;
@@ -29,12 +37,12 @@ async function fmpFetch<T>(path: string, params: Record<string, string> = {}): P
 
   // Web/Electron: backend proxy (key stored server-side or forwarded in header)
   const query = new URLSearchParams(params).toString();
-  const url = `${getBackendBase()}/api/fmp/${path}${query ? `?${query}` : ''}`;
+  const url = `${getBackendBase()}/api/market/fmp/${path}${query ? `?${query}` : ''}`;
   const res = await fetch(url, {
     headers: { 'x-fmp-key': key },
   });
   if (res.status === 401) throw new Error('Invalid FMP API key — check Settings');
-  if (res.status === 403) throw new Error('This feature requires a paid FMP plan (free tier does not include this endpoint)');
+  if (res.status === 403) throw new FmpUpgradeRequiredError();
   if (res.status === 429) throw new Error('FMP rate limit reached — try again in a minute');
   if (!res.ok) throw new Error(`FMP proxy error ${res.status}`);
   return res.json();

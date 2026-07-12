@@ -263,7 +263,9 @@ router.get('/fmp/*', async (req: Request, res: Response) => {
     );
     res.json(data);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    // Forward the upstream status (401/403/429) so the frontend can detect
+    // invalid-key and paid-plan conditions instead of seeing a generic 500.
+    res.status(err.response?.status ?? 500).json({ error: err.message });
   }
 });
 
