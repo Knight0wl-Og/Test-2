@@ -11,6 +11,7 @@ import {
   deleteWatchlistNative, addSymbolToWatchlistNative, removeSymbolFromWatchlistNative,
 } from './nativeWatchlist';
 import { fetchResearchNative, type ResearchData } from './nativeResearch';
+import { fetchScreenerNative, parseScreenerQuotes, type ScreenerId } from './nativeScreener';
 import { fetchOptionsNative, type OptionsChain } from './nativeOptions';
 import {
   isSchwabConnected,
@@ -95,6 +96,16 @@ export async function fetchEarningsThisWeek(): Promise<string[]> {
   if (isNative()) return fetchEarningsThisWeekNative();
   const { data } = await api.get<string[]>('/api/market/earnings-week');
   return data;
+}
+
+// ---- Screener ----
+
+export type { ScreenerId };
+
+export async function fetchScreener(scrId: ScreenerId, count = 25): Promise<Quote[]> {
+  if (isNative()) return fetchScreenerNative(scrId, count);
+  const { data } = await api.get('/api/market/screener', { params: { scrIds: scrId, count } });
+  return parseScreenerQuotes(data);
 }
 
 // ---- Research ----
