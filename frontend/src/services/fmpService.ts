@@ -50,38 +50,6 @@ async function fmpFetch<T>(path: string, params: Record<string, string> = {}): P
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export interface FMPEarningsEvent {
-  date: string;
-  symbol: string;
-  eps: number | null;
-  epsEstimated: number | null;
-  revenue: number | null;
-  revenueEstimated: number | null;
-  time: string;
-  updatedFromDate: string | null;
-  fiscalDateEnding: string;
-}
-
-export interface FMPHistoricalEarnings {
-  date: string;
-  symbol: string;
-  eps: number | null;
-  epsEstimated: number | null;
-  revenueEstimated: number | null;
-  revenue: number | null;
-  surprisePercent: number | null;
-}
-
-export interface FMPAnalystEstimate {
-  date: string;
-  symbol: string;
-  estimatedRevenueAvg: number;
-  estimatedEpsAvg: number;
-  estimatedEpsHigh: number;
-  estimatedEpsLow: number;
-  numberAnalystsEstimatedEps: number;
-}
-
 export interface FMPIncomeStatement {
   date: string;
   symbol: string;
@@ -167,30 +135,7 @@ export interface FMPEtfHolder {
   updated: string;
 }
 
-export interface FMPTechnicalIndicator {
-  date: string;
-  close: number;
-  ema?: number;
-  rsi?: number;
-  sma?: number;
-  macd?: number;
-  signal?: number;
-  histogram?: number;
-}
-
-// ─── Earnings ────────────────────────────────────────────────────────────────
-
-export async function fetchEarningsCalendarFMP(from: string, to: string): Promise<FMPEarningsEvent[]> {
-  return fmpFetch('v3/earning_calendar', { from, to });
-}
-
-export async function fetchEarningsHistoryFMP(symbol: string, limit = 8): Promise<FMPHistoricalEarnings[]> {
-  return fmpFetch(`v3/historical/earning_calendar/${encodeURIComponent(symbol)}`, { limit: String(limit) });
-}
-
-export async function fetchAnalystEstimatesFMP(symbol: string, period: 'quarter' | 'annual' = 'quarter'): Promise<FMPAnalystEstimate[]> {
-  return fmpFetch(`v3/analyst-estimates/${encodeURIComponent(symbol)}`, { period, limit: '4' });
-}
+// ─── Income Statement ────────────────────────────────────────────────────────
 
 export async function fetchIncomeStatementFMP(
   symbol: string,
@@ -269,38 +214,3 @@ export async function fetchCashFlowStatementFMP(
   });
 }
 
-// ─── Price Target ────────────────────────────────────────────────────────────
-
-export interface FMPPriceTargetConsensus {
-  symbol: string;
-  targetHigh: number | null;
-  targetLow: number | null;
-  targetConsensus: number | null;
-  targetMedian: number | null;
-}
-
-/** Returns null on 403/error so callers can silently degrade */
-export async function fetchPriceTargetConsensusFMP(
-  symbol: string
-): Promise<FMPPriceTargetConsensus | null> {
-  try {
-    const data = await fmpFetch<FMPPriceTargetConsensus[]>(`v4/price-target-consensus`, { symbol });
-    return Array.isArray(data) && data.length ? data[0] : null;
-  } catch {
-    return null;
-  }
-}
-
-// ─── Technicals ───────────────────────────────────────────────────────────────
-
-export async function fetchTechnicalIndicatorFMP(
-  symbol: string,
-  type: 'rsi' | 'ema' | 'sma' | 'macd',
-  period = 14
-): Promise<FMPTechnicalIndicator[]> {
-  return fmpFetch(`v3/technical_indicator/daily/${encodeURIComponent(symbol)}`, {
-    period: String(period),
-    type,
-    limit: '60',
-  });
-}

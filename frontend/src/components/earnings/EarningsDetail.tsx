@@ -11,13 +11,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X, ChevronRight, Sparkles, RefreshCw } from 'lucide-react';
-import { fetchBatchQuotes } from '../../services/api';
+import { fetchBatchQuotes, fetchResearch } from '../../services/api';
 import { fetchEarningsCalendar } from '../../services/finnhubService';
-import {
-  fetchKeyMetricsFMP,
-  fetchAnalystEstimatesFMP,
-  getFmpKey,
-} from '../../services/fmpService';
+import { fetchKeyMetricsFMP, getFmpKey } from '../../services/fmpService';
 import { runAIPrompt, getActiveProvider } from '../../services/aiService';
 import clsx from 'clsx';
 
@@ -138,7 +134,7 @@ function BarChart({ data, color }: { data: BarEntry[]; color: string }) {
 
 function UpcomingCard({ entry, analystEst }: {
   entry: { date: string; epsEstimate: number | null; revenueEstimate: number | null; hour?: string };
-  analystEst: { estimatedRevenueAvg: number; estimatedEpsAvg: number } | null;
+  analystEst: { estimatedRevenueAvg: number | null; estimatedEpsAvg: number | null } | null;
 }) {
   const days = daysUntil(entry.date);
   const label = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `in ${days} Days`;
@@ -324,14 +320,16 @@ export function EarningsDetail({ symbol, onClose, onViewChart }: Props) {
   });
   const metric = metrics?.[0];
 
-  // Analyst estimates for next quarter — FMP free
-  const { data: estimates } = useQuery({
-    queryKey: ['eq-estimates', symbol],
-    queryFn: () => fetchAnalystEstimatesFMP(symbol, 'quarter'),
-    enabled: hasFmp,
+  // Next-quarter analyst EPS estimate — Yahoo earningsTrend (free, keyless)
+  const { data: research } = useQuery({
+    queryKey: ['eq-research', symbol],
+    queryFn: () => fetchResearch(symbol),
     staleTime: 24 * 60 * 60_000,
   });
-  const nextEstimate = estimates?.find((e) => e.date > today) ?? null;
+  const nextQ = research?.epsTrend.nextQuarter ?? null;
+  const nextEstimate = nextQ?.avgEps != null
+    ? { estimatedRevenueAvg: null, estimatedEpsAvg: nextQ.avgEps }
+    : null;
 
   // Split calendar into past and upcoming
   const pastEntries = calendar.filter((e) => e.date <= today && e.epsActual != null).slice().reverse();

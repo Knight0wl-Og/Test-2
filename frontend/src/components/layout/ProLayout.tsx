@@ -16,29 +16,7 @@ import { BottomNav } from './BottomNav';
 import { WatchlistPanel } from '../watchlist/WatchlistPanel';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
-
-const ROUTE_MAP: Record<string, string> = {
-  dashboard: '/',
-  top10: '/top10',
-  scanner: '/scanner',
-  research: '/research',
-  options: '/options',
-  copilot: '/copilot',
-  alerts: '/alerts',
-  portfolio: '/portfolio',
-  earnings: '/earnings',
-  'earnings-predictor': '/earnings-predictor',
-  'earnings-visualizer': '/earnings-visualizer',
-  'economic-calendar': '/economic-calendar',
-  'eps-valuation': '/eps-valuation',
-  'etf-flows': '/etf-flows',
-  'pe-analyzer': '/pe-analyzer',
-  'profitability-compare': '/profitability-compare',
-  dividends: '/dividends',
-  'intel-library': '/intel-library',
-  technicals: '/technicals',
-  'covered-call-etfs': '/covered-call-etfs',
-};
+import { ROUTE_MAP } from '../../config/features';
 
 interface ProLayoutProps {
   children: React.ReactNode;
