@@ -5,7 +5,6 @@ on:
     tags:
       - 'v*'
     branches:
-      - 'main'
       - 'release/*'
   workflow_dispatch:
 
@@ -13,40 +12,16 @@ permissions:
   contents: write
   actions: write
 
+# APK signing: the permanent keystore is committed to the repo at
+# frontend/android/app/tradeedge-ci.keystore and wired into build.gradle,
+# so every build (CI or local) produces APKs with the same signature and
+# updates always install over previous versions. No cache, no priming.
+
 jobs:
-  # ── Lightweight job: runs only on main pushes ─────────────────────────
-  # Seeds the keystore cache on the default branch so every tag-triggered
-  # build can restore it. GitHub cache from main is accessible to all
-  # branches and tags.
-  prime-keystore:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Restore keystore cache
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore-v1
-
-      - name: Generate keystore (first push to main only)
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ~/.android
-          keytool -genkey -v \
-            -keystore ~/.android/debug.keystore \
-            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
-          echo "✓ Keystore generated and cached on main branch"
-          echo "  All future tag builds will restore this exact keystore."
-
   # Delete all leftover artifacts from previous runs before starting new builds.
   # Keeps the 0.5 GB storage limit from filling up across failed/partial runs.
   cleanup-artifacts:
-    if: >
-      github.server_url == 'https://github.com' &&
-      github.ref != 'refs/heads/main'
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     steps:
       - name: Delete all existing artifacts
@@ -66,9 +41,7 @@ jobs:
           echo "Pre-cleanup complete"
 
   build-windows:
-    if: >
-      github.server_url == 'https://github.com' &&
-      github.ref != 'refs/heads/main'
+    if: github.server_url == 'https://github.com'
     needs: [cleanup-artifacts]
     runs-on: windows-latest
     steps:
@@ -140,9 +113,7 @@ jobs:
           retention-days: 1
 
   build-android:
-    if: >
-      github.server_url == 'https://github.com' &&
-      github.ref != 'refs/heads/main'
+    if: github.server_url == 'https://github.com'
     needs: [cleanup-artifacts]
     runs-on: ubuntu-latest
     steps:
@@ -154,32 +125,11 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      # ── Android signing keystore ──────────────────────────────────────
-      # Restore the keystore cached by the prime-keystore job (which runs
-      # on every main push). Same key used every build → same APK signature
-      # → users can install updates over existing installs.
-      - name: Restore Android signing keystore
-        id: keystore-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore-v1
-
-      - name: Generate Android signing keystore (cache miss fallback)
-        if: steps.keystore-cache.outputs.cache-hit != 'true'
+      - name: Verify signing keystore (committed to repo)
         run: |
-          mkdir -p ~/.android
-          keytool -genkey -v \
-            -keystore ~/.android/debug.keystore \
-            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
-          echo "✓ New keystore generated (cache was empty)"
-
-      - name: Verify keystore
-        run: |
-          keytool -list -keystore ~/.android/debug.keystore -storepass android -noprompt
-          echo "✓ Keystore ready"
+          keytool -list -keystore frontend/android/app/tradeedge-ci.keystore \
+            -storetype PKCS12 -storepass tradeedge -noprompt
+          echo "✓ Permanent keystore present — APK signature will match all prior releases"
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -240,7 +190,6 @@ jobs:
     if: >
       always() &&
       github.server_url == 'https://github.com' &&
-      github.ref != 'refs/heads/main' &&
       (needs.build-windows.result == 'success' || needs.build-android.result == 'success')
     steps:
       - uses: actions/checkout@v4

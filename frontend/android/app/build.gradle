@@ -22,8 +22,25 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Permanent signing key committed to the repo (tradeedge-ci.keystore).
+    // Every APK — local or CI — is signed with this exact key, so updates
+    // always install over the previous version. Do NOT regenerate this file:
+    // a new key means every user must uninstall/reinstall once.
+    signingConfigs {
+        ci {
+            storeFile file('tradeedge-ci.keystore')
+            storeType 'PKCS12'
+            storePassword 'tradeedge'
+            keyAlias 'tradeedge'
+            keyPassword 'tradeedge'
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.ci
+        }
         release {
+            signingConfig signingConfigs.ci
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
