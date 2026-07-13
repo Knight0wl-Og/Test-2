@@ -5,7 +5,7 @@ import {
   Check, RefreshCw, Download, AlertCircle, RotateCcw, Plus, Trash2, Wifi,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
-import { checkAndDownload, applyUpdate, type UpdateProgress } from '../../services/liveUpdate';
+import { checkAndDownload, applyUpdate, downloadAndInstallApk, type UpdateProgress } from '../../services/liveUpdate';
 import { loadAlerts, removeAlert, type PriceAlert } from '../../services/alertsService';
 import { AddAlertModal } from '../common/AddAlertModal';
 import { getFmpKey } from '../../services/fmpService';
@@ -150,6 +150,45 @@ function UpdateSection() {
           <div className="flex items-center gap-2 text-xs text-green"><Check className="w-3.5 h-3.5 shrink-0" />Update downloaded</div>
           <button onClick={applyUpdate} className="w-full flex items-center justify-center gap-2 bg-green/20 hover:bg-green/30 border border-green/40 text-green rounded py-2 text-sm font-medium transition-colors">
             <RotateCcw className="w-4 h-4" />Restart Now
+          </button>
+        </div>
+      )}
+      {upd.state === 'apk-available' && upd.apk && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-gold">
+            <Download className="w-3.5 h-3.5 shrink-0" />
+            Version {upd.apk.version} is available ({upd.apk.sizeMB} MB)
+          </div>
+          <button
+            onClick={() => downloadAndInstallApk(upd.apk!, setUpd)}
+            className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-hover text-white rounded py-2 text-sm font-medium transition-colors"
+          >
+            <Download className="w-4 h-4" />Download &amp; Install v{upd.apk.version}
+          </button>
+          <p className="text-[10px] text-text-muted/60 leading-snug">
+            Updates the entire app. Android will show an install prompt — tap Update.
+          </p>
+        </div>
+      )}
+      {upd.state === 'apk-downloading' && upd.apk && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-text-muted">
+            <div className="flex items-center gap-2"><Download className="w-3.5 h-3.5 animate-bounce shrink-0" /><span>Downloading v{upd.apk.version}…</span></div>
+            <span className="font-mono">{upd.progress}%</span>
+          </div>
+          <div className="h-1.5 bg-bg-hover rounded-full overflow-hidden">
+            <div className="h-full bg-accent rounded-full transition-all duration-300" style={{ width: `${upd.progress}%` }} />
+          </div>
+        </div>
+      )}
+      {upd.state === 'apk-ready' && upd.apk && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-green"><Check className="w-3.5 h-3.5 shrink-0" />Installer opened — tap Update to finish</div>
+          <button
+            onClick={() => downloadAndInstallApk(upd.apk!, setUpd)}
+            className="text-xs text-text-muted hover:text-gray-300 underline"
+          >
+            Installer didn't open? Try again
           </button>
         </div>
       )}

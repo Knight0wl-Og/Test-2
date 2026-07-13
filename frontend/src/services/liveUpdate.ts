@@ -37,12 +37,16 @@ export async function resetStaleOtaBundle(): Promise<void> {
   }
 }
 
-export type UpdateState = 'idle' | 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error';
+export type UpdateState =
+  | 'idle' | 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error'
+  | 'apk-available' | 'apk-downloading' | 'apk-ready';
 
 export interface UpdateProgress {
   state: UpdateState;
   progress: number; // 0–100
   message?: string;
+  /** Set when state is apk-available/apk-downloading/apk-ready */
+  apk?: { version: string; url: string; sizeMB: number };
 }
 
 /**
@@ -59,9 +63,12 @@ export async function confirmBundle(): Promise<void> {
 }
 
 /**
- * Check GitHub Releases for a newer bundle.zip, download it, and stage it.
- * Reports progress via the onUpdate callback.
- * Call applyUpdate() to reload and apply after state === 'ready'.
+ * Check GitHub Releases for updates.
+ * - If the release version is newer than the installed APK, offer a FULL
+ *   app update (state 'apk-available') — the caller then invokes
+ *   downloadAndInstallApk() which hands the APK to Android's installer.
+ * - Otherwise falls back to the OTA bundle flow (JS-only update):
+ *   downloads bundle.zip and stages it; call applyUpdate() after 'ready'.
  */
 export async function checkAndDownload(
   onUpdate: (p: UpdateProgress) => void
@@ -90,9 +97,34 @@ export async function checkAndDownload(
     }
 
     const release = res.data;
-    const asset = (
-      release.assets as Array<{ name: string; browser_download_url: string; updated_at: string }>
-    ).find((a) => a.name === 'bundle.zip');
+    const assets = release.assets as Array<{ name: string; browser_download_url: string; updated_at: string; size: number }>;
+
+    // ── Full APK update: release tag newer than the installed app? ──
+    const latestVersion = String(release.tag_name ?? '').replace(/^v/, '');
+    const apkAsset = assets.find((a) => a.name === 'TradeEdge.apk');
+    if (latestVersion && apkAsset) {
+      try {
+        const { App } = await import('@capacitor/app');
+        const info = await App.getInfo();
+        if (info.version && compareVersions(latestVersion, info.version) > 0) {
+          onUpdate({
+            state: 'apk-available',
+            progress: 0,
+            apk: {
+              version: latestVersion,
+              url: apkAsset.browser_download_url,
+              sizeMB: Math.round((apkAsset.size / 1e6) * 10) / 10,
+            },
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('[liveUpdate] APK version check failed, falling back to bundle:', err);
+      }
+    }
+
+    // ── OTA bundle update (JS-only) ──
+    const asset = assets.find((a) => a.name === 'bundle.zip');
 
     if (!asset) {
       onUpdate({ state: 'error', progress: 0, message: 'No update bundle found in this release.' });
@@ -138,5 +170,67 @@ export async function applyUpdate(): Promise<void> {
     await LiveUpdate.reload();
   } catch (err) {
     console.warn('[liveUpdate] reload failed:', err);
+  }
+}
+
+/**
+ * Download the release APK from GitHub and hand it to Android's package
+ * installer. Because every release is signed with the same permanent key,
+ * the installer shows a simple "Update" prompt and the whole app (native
+ * shell + JS) updates in place — no uninstall.
+ *
+ * The first time, Android asks the user to allow "install unknown apps"
+ * for TradeEdge; after that it's one tap.
+ */
+export async function downloadAndInstallApk(
+  apk: { version: string; url: string; sizeMB: number },
+  onUpdate: (p: UpdateProgress) => void
+): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+
+  onUpdate({ state: 'apk-downloading', progress: 0, apk });
+
+  try {
+    const { Filesystem, Directory } = await import('@capacitor/filesystem');
+
+    const listener = await Filesystem.addListener('progress', (p) => {
+      if (p.contentLength > 0) {
+        onUpdate({
+          state: 'apk-downloading',
+          progress: Math.min(Math.round((p.bytes / p.contentLength) * 100), 100),
+          apk,
+        });
+      }
+    });
+
+    let filePath: string | undefined;
+    try {
+      const result = await Filesystem.downloadFile({
+        url: apk.url,
+        path: `TradeEdge-${apk.version}.apk`,
+        directory: Directory.Cache,
+        progress: true,
+      });
+      filePath = result.path;
+    } finally {
+      await listener.remove();
+    }
+
+    if (!filePath) throw new Error('Download produced no file');
+
+    onUpdate({ state: 'apk-ready', progress: 100, apk });
+
+    const { FileOpener } = await import('@capacitor-community/file-opener');
+    await FileOpener.open({
+      filePath,
+      contentType: 'application/vnd.android.package-archive',
+    });
+  } catch (err) {
+    console.warn('[liveUpdate] APK update failed:', err);
+    onUpdate({
+      state: 'error',
+      progress: 0,
+      message: 'Full update failed — check your connection and try again, or download the APK from GitHub manually.',
+    });
   }
 }
