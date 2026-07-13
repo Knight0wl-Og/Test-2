@@ -83,10 +83,10 @@ export function Portfolio() {
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 min-h-full bg-bg-primary">
       <div className="flex items-center gap-2">
         <Briefcase className="w-4 h-4 text-accent" />
-        <h1 className="text-sm font-semibold text-white">Portfolio</h1>
+        <h1 className="text-base font-bold text-white">Portfolio</h1>
         <button
           onClick={() => setShowAdd(true)}
           className="ml-auto flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"

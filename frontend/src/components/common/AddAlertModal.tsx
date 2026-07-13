@@ -27,7 +27,7 @@ export function AddAlertModal({ defaultSymbol = '', onClose, onAdded }: AddAlert
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="bg-bg-card border border-border-dim rounded-xl p-5 w-full max-w-xs mx-4">
+      <div className="card-surface p-5 w-full max-w-xs mx-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Bell className="w-4 h-4 text-accent" />

@@ -23,7 +23,7 @@ export function TickerTape() {
   const items = [...quotes, ...quotes];
 
   return (
-    <div className="w-full overflow-hidden bg-[#0d0f1e] border-b border-border-dim/30 h-8 flex items-center">
+    <div className="w-full overflow-hidden bg-bg-panel border-b border-border-dim/30 h-8 flex items-center">
       <div
         className="flex gap-6 whitespace-nowrap"
         style={{

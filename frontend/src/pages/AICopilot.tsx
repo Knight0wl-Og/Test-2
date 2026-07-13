@@ -288,10 +288,10 @@ export function AICopilot() {
   const provider = getActiveProvider();
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 min-h-full bg-bg-primary">
       <div className="flex items-center gap-2 flex-wrap">
         <Bot className="w-4 h-4 text-accent" />
-        <h1 className="text-sm font-semibold text-white">AI Copilot</h1>
+        <h1 className="text-base font-bold text-white">AI Copilot</h1>
         <span className="text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent">Beta</span>
         <ProviderBadge />
       </div>

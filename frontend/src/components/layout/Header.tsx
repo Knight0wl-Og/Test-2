@@ -46,7 +46,7 @@ function NotificationsDropdown({ onClose }: { onClose: () => void }) {
     <>
       <div
         ref={ref}
-        className="absolute right-0 top-full mt-1 w-72 bg-bg-card border border-border-dim rounded-xl shadow-xl z-50 overflow-hidden"
+        className="absolute right-0 top-full mt-1 w-72 card-surface shadow-xl z-50 overflow-hidden"
       >
         <div className="flex items-center justify-between px-3 py-2 border-b border-border-dim">
           <span className="text-xs font-semibold text-white">
@@ -249,7 +249,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="bg-bg-card border border-border-dim rounded-xl p-5 w-full max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="card-surface p-5 w-full max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Settings className="w-4 h-4 text-accent" />

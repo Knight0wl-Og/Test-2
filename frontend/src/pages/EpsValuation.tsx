@@ -215,8 +215,8 @@ export function EpsValuation() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse">
               <thead>
-                <tr className="bg-[#0d1030]">
-                  <th className="sticky left-0 z-10 bg-[#0d1030] px-3 py-3 text-left text-text-muted font-semibold whitespace-nowrap border-b border-border-dim">
+                <tr className="bg-bg-panel">
+                  <th className="sticky left-0 z-10 bg-bg-panel px-3 py-3 text-left text-text-muted font-semibold whitespace-nowrap border-b border-border-dim">
                     Company
                   </th>
                   <th className="px-3 py-3 text-left text-text-muted font-semibold border-b border-border-dim">
@@ -250,7 +250,7 @@ export function EpsValuation() {
               </thead>
               <tbody>
                 {rows.map((row, i) => {
-                  const rowBg = i % 2 === 0 ? 'bg-bg-card' : 'bg-[#0a0d1f]';
+                  const rowBg = i % 2 === 0 ? 'bg-bg-card' : 'bg-bg-panel';
                   return (
                     <tr key={row.ticker} className={rowBg}>
                       {/* Company (sticky) */}
@@ -283,7 +283,7 @@ export function EpsValuation() {
                                 value={display}
                                 onChange={(e) => setOverride(row.ticker, field, e.target.value)}
                                 placeholder="—"
-                                className="w-[68px] text-right bg-[#1a1e3a] border border-[#2a3470] hover:border-amber-500/50 focus:border-amber-500 rounded px-1.5 py-1 text-[11px] text-amber-300 font-mono focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                className="w-[68px] text-right bg-bg-hover border border-accent/40 hover:border-amber-500/50 focus:border-amber-500 rounded px-1.5 py-1 text-[11px] text-amber-300 font-mono focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
                             )}
                           </td>
@@ -325,7 +325,7 @@ export function EpsValuation() {
           </div>
 
           {/* Hint row */}
-          <div className="px-4 py-2 bg-[#0d1030] border-t border-border-dim/30 text-[10px] text-text-muted/60">
+          <div className="px-4 py-2 bg-bg-panel border-t border-border-dim/30 text-[10px] text-text-muted/60">
             ✎ EPS cells are editable — type to override analyst estimates and recalculate P/E instantly.
             {' '}{CURRENT_YEAR + 2} estimates aren't published by Yahoo — enter them manually.
           </div>

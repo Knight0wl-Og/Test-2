@@ -48,7 +48,7 @@ export function Dividends() {
     <div className="p-4 min-h-full bg-bg-primary">
       <div className="flex items-center gap-2 mb-4">
         <DollarSign className="w-4 h-4 text-green shrink-0" />
-        <h1 className="text-sm font-bold text-white">Dividends</h1>
+        <h1 className="text-base font-bold text-white">Dividends</h1>
       </div>
 
       <form

@@ -60,7 +60,7 @@ export function EconomicCalendar() {
     <div className="p-4 min-h-full bg-bg-primary">
       <div className="flex items-center gap-2 mb-4">
         <Activity className="w-4 h-4 text-rose-400 shrink-0" />
-        <h1 className="text-sm font-bold text-white">Economic Calendar</h1>
+        <h1 className="text-base font-bold text-white">Economic Calendar</h1>
       </div>
 
       {/* Week navigation */}

@@ -122,7 +122,7 @@ function BarChart({ data, color }: { data: BarEntry[]; color: string }) {
       </svg>
       {/* Legend */}
       <div className="flex items-center gap-4 mt-1 px-1">
-        <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-[#374151]" /><span className="text-[9px] text-gray-500">Estimate</span></div>
+        <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-gray-700" /><span className="text-[9px] text-gray-500">Estimate</span></div>
         <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} /><span className="text-[9px] text-gray-500">Actual (beat)</span></div>
         <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-red-500" /><span className="text-[9px] text-gray-500">Actual (miss)</span></div>
       </div>
@@ -356,7 +356,7 @@ export function EarningsDetail({ symbol, onClose, onViewChart }: Props) {
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
 
       {/* Sheet */}
-      <div className="relative mt-auto bg-[#0a0b14] rounded-t-3xl border-t border-white/10 flex flex-col" style={{ maxHeight: '92vh' }}>
+      <div className="relative mt-auto bg-bg-panel rounded-t-3xl border-t border-white/10 flex flex-col" style={{ maxHeight: '92vh' }}>
         {/* Handle */}
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-3 mb-1 shrink-0" />
 
@@ -424,7 +424,7 @@ export function EarningsDetail({ symbol, onClose, onViewChart }: Props) {
             <>
               {/* Chart */}
               {chartData.length > 0 && (
-                <div className="bg-[#0d0e1a] rounded-2xl border border-white/5 p-3">
+                <div className="bg-bg-panel rounded-2xl border border-white/5 p-3">
                   <div className="flex items-center gap-2 mb-3">
                     {(['revenue', 'eps'] as const).map((m) => (
                       <button key={m} onClick={() => setChartMetric(m)}
@@ -443,12 +443,12 @@ export function EarningsDetail({ symbol, onClose, onViewChart }: Props) {
               {withData.length > 0 && (
                 <div className="flex gap-2">
                   {revWithData.length > 0 && (
-                    <div className="flex-1 bg-[#0d0e1a] rounded-xl border border-white/5 px-3 py-2.5">
+                    <div className="flex-1 bg-bg-panel rounded-xl border border-white/5 px-3 py-2.5">
                       <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">REV Beat Rate</p>
                       <p className="text-sm font-bold text-white">{revBeatCount}<span className="text-gray-500 font-normal text-xs"> / {revWithData.length} Q</span></p>
                     </div>
                   )}
-                  <div className="flex-1 bg-[#0d0e1a] rounded-xl border border-white/5 px-3 py-2.5">
+                  <div className="flex-1 bg-bg-panel rounded-xl border border-white/5 px-3 py-2.5">
                     <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">EPS Beat Rate</p>
                     <p className="text-sm font-bold text-white">{epsBeatCount}<span className="text-gray-500 font-normal text-xs"> / {withData.length} Q</span></p>
                   </div>

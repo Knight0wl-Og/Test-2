@@ -8,7 +8,7 @@ interface StatCardProps {
 function StatCard({ label, value, yoy, margin }: StatCardProps) {
   const yoyUp = yoy?.startsWith('+');
   return (
-    <div className="bg-[#0d1030] border border-[#1e2448] rounded-xl p-4 flex-1 min-w-0">
+    <div className="bg-bg-panel border border-[#1e2448] rounded-xl p-4 flex-1 min-w-0">
       <p className="text-xs text-gray-400 mb-1">{label}</p>
       <p className="text-xl font-bold text-amber-400 font-mono leading-tight">{value}</p>
       {(yoy || margin) && (

@@ -22,7 +22,7 @@ export function ApiConfigModal({ open, onClose }: ApiConfigModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="bg-bg-card border border-border-dim rounded-xl p-6 w-full max-w-sm mx-4">
+      <div className="card-surface p-6 w-full max-w-sm mx-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Wifi className="w-4 h-4 text-accent" />

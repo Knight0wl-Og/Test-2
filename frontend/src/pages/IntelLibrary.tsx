@@ -56,7 +56,7 @@ export function IntelLibrary() {
     <div className="p-4 min-h-full bg-bg-primary">
       <div className="flex items-center gap-2 mb-4">
         <Newspaper className="w-4 h-4 text-sky-400 shrink-0" />
-        <h1 className="text-sm font-bold text-white">Intel Library</h1>
+        <h1 className="text-base font-bold text-white">Intel Library</h1>
       </div>
 
       {/* Tabs */}

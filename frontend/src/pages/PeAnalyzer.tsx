@@ -21,7 +21,7 @@ function SymbolResult({ symbol, color, onRemove }: { symbol: string; color: stri
   const older = data?.[3]; // ~1 year ago
 
   return (
-    <div className="bg-bg-card border border-border-dim rounded-xl p-4 mb-3">
+    <div className="card-surface p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
         <span className={clsx('text-sm font-bold font-mono', color)}>{symbol}</span>
         <button onClick={onRemove} className="text-text-muted hover:text-white transition-colors">
@@ -94,7 +94,7 @@ export function PeAnalyzer() {
     <div className="p-4 min-h-full bg-bg-primary">
       <div className="flex items-center gap-2 mb-4">
         <GitCompare className="w-4 h-4 text-orange-400 shrink-0" />
-        <h1 className="text-sm font-bold text-white">P/E Analyzer</h1>
+        <h1 className="text-base font-bold text-white">P/E Analyzer</h1>
       </div>
       <p className="text-[11px] text-text-muted mb-4">Compare up to 4 stocks — P/E, P/B, margins, ROE vs 1 year ago.</p>
 

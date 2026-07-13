@@ -147,11 +147,11 @@ export function EarningsVisualizer() {
 
           <div className="flex gap-2">
             <button onClick={() => exportPng(incomeRef.current, safeFilename('income.png'))}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#1e2448] hover:bg-[#252d5e] border border-[#2a3470] rounded-lg text-sm text-white font-medium transition-colors">
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-accent/20 hover:bg-accent/30 border border-accent/40 rounded-lg text-sm text-white font-medium transition-colors">
               <ImageIcon className="w-4 h-4" /> Export PNG (1920×1100)
             </button>
             <button onClick={() => exportSvg(incomeRef.current, safeFilename('income.svg'))}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#1e2448] hover:bg-[#252d5e] border border-[#2a3470] rounded-lg text-sm text-white font-medium transition-colors">
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-accent/20 hover:bg-accent/30 border border-accent/40 rounded-lg text-sm text-white font-medium transition-colors">
               <Download className="w-4 h-4" /> Export SVG
             </button>
           </div>
@@ -166,11 +166,11 @@ export function EarningsVisualizer() {
 
           <div className="flex gap-2">
             <button onClick={() => exportPng(cashRef.current, safeFilename('cashflow.png'))}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#1e2448] hover:bg-[#252d5e] border border-[#2a3470] rounded-lg text-sm text-white font-medium transition-colors">
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-accent/20 hover:bg-accent/30 border border-accent/40 rounded-lg text-sm text-white font-medium transition-colors">
               <ImageIcon className="w-4 h-4" /> Export PNG (1920×1100)
             </button>
             <button onClick={() => exportSvg(cashRef.current, safeFilename('cashflow.svg'))}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#1e2448] hover:bg-[#252d5e] border border-[#2a3470] rounded-lg text-sm text-white font-medium transition-colors">
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-accent/20 hover:bg-accent/30 border border-accent/40 rounded-lg text-sm text-white font-medium transition-colors">
               <Download className="w-4 h-4" /> Export SVG
             </button>
           </div>

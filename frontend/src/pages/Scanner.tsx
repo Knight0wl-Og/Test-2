@@ -96,10 +96,10 @@ export function Scanner() {
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 min-h-full bg-bg-primary">
       <div className="flex items-center gap-2">
         <Filter className="w-4 h-4 text-accent" />
-        <h1 className="text-sm font-semibold text-white">Scanner</h1>
+        <h1 className="text-base font-bold text-white">Scanner</h1>
         {!isLoading && !error && (
           <span className="text-xs text-text-muted ml-auto">{results.length} results</span>
         )}

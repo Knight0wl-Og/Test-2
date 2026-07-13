@@ -95,7 +95,7 @@ function CompanyLogo({ symbol, size, onClick }: { symbol: string; size: 'sm' | '
 function SectionBlock({ type, events, logoSize, onSelect }: { type: 'bmo' | 'amc'; events: EarningsEvent[]; logoSize: 'sm' | 'lg'; onSelect: (s: string) => void }) {
   if (events.length === 0) return null;
   return (
-    <div className="rounded-2xl bg-[#111222] border border-white/5 overflow-hidden">
+    <div className="rounded-2xl bg-bg-panel border border-white/5 overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5">
         <span className="text-base">{type === 'bmo' ? '☀️' : '🌙'}</span>
         <span className="text-sm font-semibold text-white">{type === 'bmo' ? 'Before Open' : 'After Close'}</span>
@@ -118,7 +118,7 @@ function ListView({ days, grouped, onSelect }: { days: ReturnType<typeof getWeek
         return (
           <div key={d.date} className="flex gap-3">
             <div className="flex flex-col items-center shrink-0 w-12 pt-1">
-              <div className={clsx('w-12 rounded-2xl flex flex-col items-center justify-center py-2 gap-0.5', d.isToday ? 'bg-green-500' : 'bg-[#1a1b2e]')}>
+              <div className={clsx('w-12 rounded-2xl flex flex-col items-center justify-center py-2 gap-0.5', d.isToday ? 'bg-green-500' : 'bg-bg-hover')}>
                 <span className={clsx('text-[10px] font-bold tracking-widest', d.isToday ? 'text-white' : 'text-gray-400')}>{d.dayName}</span>
                 <span className={clsx('text-xl font-bold leading-none', d.isToday ? 'text-white' : 'text-gray-200')}>{d.dayNum}</span>
               </div>
@@ -149,19 +149,19 @@ function GridView({ days, grouped, onSelect }: { days: ReturnType<typeof getWeek
               <div className={clsx('w-7 h-7 rounded-full flex items-center justify-center text-[13px] font-bold', d.isToday ? 'bg-green-500 text-white' : 'text-gray-400')}>{d.dayNum}</div>
             </div>
             {!hasAny ? (
-              <div className="rounded-xl bg-[#0d0e1a] border border-white/5 flex items-center justify-center min-h-[60px]">
+              <div className="rounded-xl bg-bg-panel border border-white/5 flex items-center justify-center min-h-[60px]">
                 <span className="text-[10px] text-gray-700">—</span>
               </div>
             ) : (
               <div className="flex flex-col gap-1.5">
                 {bmo.length > 0 && (
-                  <div className="rounded-xl bg-[#0d0e1a] border border-white/5 p-1.5">
+                  <div className="rounded-xl bg-bg-panel border border-white/5 p-1.5">
                     <p className="text-[8px] text-yellow-400 font-bold mb-1.5 tracking-wide">☀ BMO</p>
                     <div className="flex flex-wrap gap-1.5">{bmo.map((e) => <CompanyLogo key={e.symbol} symbol={e.symbol} size="sm" onClick={() => onSelect(e.symbol)} />)}</div>
                   </div>
                 )}
                 {amc.length > 0 && (
-                  <div className="rounded-xl bg-[#0d0e1a] border border-white/5 p-1.5">
+                  <div className="rounded-xl bg-bg-panel border border-white/5 p-1.5">
                     <p className="text-[8px] text-blue-400 font-bold mb-1.5 tracking-wide">🌙 AMC</p>
                     <div className="flex flex-wrap gap-1.5">{amc.map((e) => <CompanyLogo key={e.symbol} symbol={e.symbol} size="sm" onClick={() => onSelect(e.symbol)} />)}</div>
                   </div>
@@ -191,11 +191,11 @@ function RadioRow({ label, selected, onSelect }: { label: string; selected: bool
 function SettingsSection({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
   return (
     <div className="mb-3">
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-[#0d2a1f] rounded-t-2xl">
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-green-bg rounded-t-2xl">
         <span className="text-sm">{icon}</span>
         <span className="text-sm font-semibold text-white">{title}</span>
       </div>
-      <div className="bg-[#0d0e1a] rounded-b-2xl border border-white/5 border-t-0">
+      <div className="bg-bg-panel rounded-b-2xl border border-white/5 border-t-0">
         {children}
       </div>
     </div>
@@ -215,7 +215,7 @@ function FilterSheet({
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="relative bg-[#0a0b14] rounded-t-3xl border-t border-white/10 p-4 pb-8 max-h-[85vh] overflow-y-auto"
+        className="relative bg-bg-panel rounded-t-3xl border-t border-white/10 p-4 pb-8 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Handle */}
@@ -238,7 +238,7 @@ function FilterSheet({
         {/* Close */}
         <button
           onClick={onClose}
-          className="w-full mt-2 py-3.5 rounded-2xl bg-[#1a1b2e] border border-white/10 text-sm font-semibold text-white active:bg-white/10 transition-colors"
+          className="w-full mt-2 py-3.5 rounded-2xl bg-bg-hover border border-white/10 text-sm font-semibold text-white active:bg-white/10 transition-colors"
         >
           Close
         </button>
@@ -315,7 +315,7 @@ export function Earnings() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-accent shrink-0" />
-          <h1 className="text-sm font-bold text-white">Earnings Calendar</h1>
+          <h1 className="text-base font-bold text-white">Earnings Calendar</h1>
         </div>
         <div className="flex items-center gap-1.5">
           {/* Filter badge */}

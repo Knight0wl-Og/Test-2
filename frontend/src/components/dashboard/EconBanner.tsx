@@ -26,7 +26,7 @@ export function EconBanner() {
   if (!hasFmp) return null;
 
   return (
-    <div className="flex items-center gap-2 px-4 py-1.5 bg-[#0d0f1e] border-b border-border-dim/30 text-[11px]">
+    <div className="flex items-center gap-2 px-4 py-1.5 bg-bg-panel border-b border-border-dim/30 text-[11px]">
       <span className="text-amber-400 font-bold tracking-widest">ECON</span>
       <span className="text-border-dim/60">•</span>
       {next ? (

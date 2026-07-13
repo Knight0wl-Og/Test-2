@@ -15,7 +15,7 @@ function RsiGauge({ rsi }: { rsi: number }) {
   const color = rsi < 30 ? 'text-green' : rsi > 70 ? 'text-red-400' : 'text-amber-400';
 
   return (
-    <div className="bg-bg-card border border-border-dim rounded-xl p-4 mb-3">
+    <div className="card-surface p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs font-semibold text-white">RSI (14)</p>
         <div className="text-right">
@@ -103,7 +103,7 @@ export function Technicals() {
     <div className="p-4 min-h-full bg-bg-primary">
       <div className="flex items-center gap-2 mb-4">
         <Activity className="w-4 h-4 text-pink-400 shrink-0" />
-        <h1 className="text-sm font-bold text-white">Technicals</h1>
+        <h1 className="text-base font-bold text-white">Technicals</h1>
       </div>
 
       <form
@@ -143,7 +143,7 @@ export function Technicals() {
       {!isLoading && snap && rsi != null && (
         <>
           {/* Consensus */}
-          <div className="bg-bg-card border border-border-dim rounded-xl p-4 mb-4 text-center">
+          <div className="card-surface p-4 mb-4 text-center">
             <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1">Overall Signal</p>
             <p className={clsx('text-2xl font-bold', consensusColor)}>{consensus}</p>
             <p className="text-[10px] text-text-muted mt-1">{bullCount} bullish · {bearCount} bearish · {4 - bullCount - bearCount} neutral</p>

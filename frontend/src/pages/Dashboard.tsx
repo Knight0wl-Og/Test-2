@@ -35,7 +35,7 @@ function IndicesRow() {
         const up = (q?.changePercent ?? 0) >= 0;
         const isVix = sym === '^VIX';
         return (
-          <div key={sym} className="bg-[#0d0f1e] border border-border-dim/40 rounded-lg p-3">
+          <div key={sym} className="card-surface !rounded-lg p-3">
             <p className="text-[10px] text-gray-500 mb-1">{INDEX_LABELS[i]}</p>
             <p className="text-base font-bold text-white font-mono leading-tight">
               {q ? (sym === '^TNX' ? `${q.price?.toFixed(2)}%` : q.price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : '—'}
@@ -188,9 +188,9 @@ function Panel({ title, badge, children, className }: {
   className?: string;
 }) {
   return (
-    <div className={clsx('bg-[#0a0b16] border border-border-dim/40 rounded-xl flex flex-col p-3', className)}>
+    <div className={clsx('card-surface flex flex-col p-3', className)}>
       <div className="flex items-center gap-1.5 mb-2 shrink-0">
-        <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">{title}</span>
+        <span className="section-label !mb-0">{title}</span>
         {badge && (
           <span className="text-[8px] bg-green-400/20 text-green-400 px-1 py-0.5 rounded font-bold">{badge}</span>
         )}
@@ -230,7 +230,7 @@ export function Dashboard() {
 
   return (
     <div
-      className="flex flex-col min-h-full bg-[#080912] relative"
+      className="flex flex-col min-h-full bg-bg-primary relative"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -251,7 +251,7 @@ export function Dashboard() {
       <EconBanner />
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Indices row */}
         <IndicesRow />
 

@@ -81,7 +81,7 @@ export function TopMovers() {
   const losers = losersQ.data ?? [];
 
   return (
-    <div className="p-4 space-y-6 min-h-full">
+    <div className="p-4 space-y-6 min-h-full bg-bg-primary">
       <div className="flex items-center gap-2">
         <TrendingUp className="w-5 h-5 text-accent" />
         <h1 className="text-base font-bold text-white">Top Movers</h1>

@@ -87,7 +87,7 @@ function CreatorCard({ creator }: { creator: Creator }) {
     .join('');
 
   return (
-    <div className="bg-bg-card border border-border-dim rounded-xl p-4 flex flex-col gap-3 min-w-[260px] lg:min-w-0">
+    <div className="card-surface p-4 flex flex-col gap-3 min-w-[260px] lg:min-w-0">
       {/* Header */}
       <div className="flex items-center gap-3">
         <div

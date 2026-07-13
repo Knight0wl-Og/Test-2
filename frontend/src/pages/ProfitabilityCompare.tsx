@@ -450,7 +450,7 @@ export function ProfitabilityCompare() {
       <div className="flex items-center gap-2">
         <BarChart className="w-4 h-4 text-emerald-400 shrink-0" />
         <div>
-          <h1 className="text-sm font-bold text-white">Profitability Compare</h1>
+          <h1 className="text-base font-bold text-white">Profitability Compare</h1>
           <p className="text-[11px] text-text-muted">Side-by-side analysis · up to 6 tickers</p>
         </div>
       </div>
@@ -722,7 +722,7 @@ export function ProfitabilityCompare() {
 
       {/* ── VERDICT ── */}
       {verdicts && verdicts.length > 1 && (
-        <div className="rounded-xl border border-border-dim bg-[#0d1030] p-4">
+        <div className="rounded-xl border border-border-dim bg-bg-panel p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-sm font-bold text-amber-400 uppercase tracking-wider">
