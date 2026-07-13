@@ -1,7 +1,41 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { LiveUpdate } from '@capawesome/capacitor-live-update';
+import { APP_VERSION } from '../version';
 
 const GITHUB_REPO = 'Knight0wl-Og/Test-2';
+
+/** Numeric semver compare: 1 if a > b, -1 if a < b, 0 if equal */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+/**
+ * If the APK was updated while an older OTA bundle was active, the plugin
+ * keeps serving the stale bundle — the app would show the old version
+ * forever. Detect that (native version newer than the running JS bundle)
+ * and reset to the APK's built-in bundle.
+ * An OTA bundle that is intentionally NEWER than the APK is left alone.
+ */
+export async function resetStaleOtaBundle(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    const { App } = await import('@capacitor/app');
+    const info = await App.getInfo();
+    if (info.version && compareVersions(info.version, APP_VERSION) > 0) {
+      console.info(`[liveUpdate] APK ${info.version} is newer than running bundle ${APP_VERSION} — resetting to built-in bundle`);
+      await LiveUpdate.reset();
+      await LiveUpdate.reload();
+    }
+  } catch (err) {
+    console.warn('[liveUpdate] stale-bundle check failed (non-fatal):', err);
+  }
+}
 
 export type UpdateState = 'idle' | 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error';
 

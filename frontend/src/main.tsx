@@ -2,12 +2,16 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
-import { confirmBundle } from './services/liveUpdate';
+import { confirmBundle, resetStaleOtaBundle } from './services/liveUpdate';
 import { migrateLocalStorageKeys, restoreKeysToLocalStorage, KEY_NAMES } from './services/keyStorage';
 import { Capacitor } from '@capacitor/core';
 
 // Confirm the running bundle is stable (prevents auto-rollback on crash)
 confirmBundle();
+
+// If the APK was updated over an older OTA bundle, drop the stale bundle so
+// the app runs the (newer) built-in assets instead of yesterday's download.
+resetStaleOtaBundle();
 
 // Status bar theming on native (Android)
 if (Capacitor.isNativePlatform()) {
