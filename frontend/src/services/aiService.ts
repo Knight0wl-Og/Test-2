@@ -1,6 +1,8 @@
 /**
  * Unified AI service — supports Gemini, Groq, and Claude.
- * Priority: Gemini → Groq → Claude (first key found is used, or preferred if both set).
+ * runAIPrompt tries every configured provider in priority order
+ * (Gemini → Groq → Claude) and falls through on failure, so a deprecated
+ * model or rate limit on one provider no longer breaks AI features.
  */
 import { Capacitor } from '@capacitor/core';
 
@@ -14,20 +16,42 @@ export function getActiveProvider(): AIProvider {
 }
 
 export const PROVIDER_LABELS: Record<Exclude<AIProvider, null>, string> = {
-  gemini: 'Gemini 2.0 Flash',
+  gemini: 'Gemini Flash',
   groq: 'Llama 3.3 70B (Groq)',
   claude: 'Claude Haiku',
 };
 
+export interface AIPromptOptions {
+  maxTokens?: number;
+  temperature?: number;
+}
+
+/** HTTP error carrying the provider's status + message so callers can classify it */
+export class AIHttpError extends Error {
+  constructor(public status: number, public providerMessage: string) {
+    super(
+      status === 401 ? 'Invalid API key. Check your key in Settings.'
+      : status === 429 ? 'Rate limit reached. Try again in a moment.'
+      : `AI request failed (${status})${providerMessage ? `: ${providerMessage}` : ''}`
+    );
+    this.name = 'AIHttpError';
+  }
+}
+
 // ─── HTTP helper (native vs web) ─────────────────────────────────────────────
+
+function extractProviderMessage(body: unknown): string {
+  // Gemini/Groq: { error: { message } } — Anthropic: { error: { message } } too
+  return (body as any)?.error?.message ?? '';
+}
 
 async function httpPost(url: string, headers: Record<string, string>, body: unknown): Promise<unknown> {
   if (Capacitor.isNativePlatform()) {
     const { CapacitorHttp } = await import('@capacitor/core');
-    const res = await CapacitorHttp.post({ url, headers, data: body });
-    if (res.status === 401) throw new Error('Invalid API key. Check your key in Settings.');
-    if (res.status === 429) throw new Error('Rate limit reached. Try again in a moment.');
-    if (res.status < 200 || res.status >= 300) throw new Error(`AI request failed (${res.status})`);
+    const res = await CapacitorHttp.post({ url, headers: { 'Content-Type': 'application/json', ...headers }, data: body });
+    if (res.status < 200 || res.status >= 300) {
+      throw new AIHttpError(res.status, extractProviderMessage(res.data));
+    }
     return res.data;
   }
   const res = await fetch(url, {
@@ -35,29 +59,56 @@ async function httpPost(url: string, headers: Record<string, string>, body: unkn
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
-  if (res.status === 401) throw new Error('Invalid API key. Check your key in Settings.');
-  if (res.status === 429) throw new Error('Rate limit reached. Try again in a moment.');
-  if (!res.ok) throw new Error(`AI request failed (${res.status})`);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null);
+    throw new AIHttpError(res.status, extractProviderMessage(errBody));
+  }
   return res.json();
 }
 
 // ─── Gemini ───────────────────────────────────────────────────────────────────
 
-async function callGemini(prompt: string): Promise<string> {
+// Newest first; older names fall through when Google retires them (404/400)
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+
+async function callGemini(prompt: string, maxTokens: number, temperature: number): Promise<string> {
   const key = localStorage.getItem('TRADEEDGE_GEMINI_KEY')!;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
-  const data = await httpPost(url, {}, {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 700, temperature: 0.7 },
-  });
-  const text = (data as any)?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Empty response from Gemini');
-  return text;
+  let lastErr: unknown;
+
+  for (const model of GEMINI_MODELS) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      const data: any = await httpPost(url, {}, {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: maxTokens, temperature },
+      });
+
+      if (data?.promptFeedback?.blockReason) {
+        throw new Error(`Gemini blocked the request (${data.promptFeedback.blockReason})`);
+      }
+      const candidate = data?.candidates?.[0];
+      const text = candidate?.content?.parts?.[0]?.text;
+      if (!text) {
+        const reason = candidate?.finishReason;
+        throw new Error(reason && reason !== 'STOP' ? `Gemini stopped early (${reason})` : 'Empty response from Gemini');
+      }
+      return text;
+    } catch (e) {
+      lastErr = e;
+      const modelGone =
+        e instanceof AIHttpError &&
+        (e.status === 404 ||
+          (e.status === 400 && /not found|not supported|invalid model|deprecated/i.test(e.providerMessage)));
+      if (!modelGone) throw e; // real failure — let the provider chain handle it
+      // else: try the next model name
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('All Gemini models unavailable');
 }
 
 // ─── Groq ─────────────────────────────────────────────────────────────────────
 
-async function callGroq(prompt: string): Promise<string> {
+async function callGroq(prompt: string, maxTokens: number, temperature: number): Promise<string> {
   const key = localStorage.getItem('TRADEEDGE_GROQ_KEY')!;
   const data = await httpPost(
     'https://api.groq.com/openai/v1/chat/completions',
@@ -65,8 +116,8 @@ async function callGroq(prompt: string): Promise<string> {
     {
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 700,
-      temperature: 0.7,
+      max_tokens: maxTokens,
+      temperature,
     }
   );
   const text = (data as any)?.choices?.[0]?.message?.content;
@@ -76,14 +127,14 @@ async function callGroq(prompt: string): Promise<string> {
 
 // ─── Claude ───────────────────────────────────────────────────────────────────
 
-async function callClaude(prompt: string): Promise<string> {
+async function callClaude(prompt: string, maxTokens: number, _temperature: number): Promise<string> {
   const key = localStorage.getItem('TRADEEDGE_ANTHROPIC_KEY')!;
   const data = await httpPost(
     'https://api.anthropic.com/v1/messages',
     { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
     {
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 700,
+      max_tokens: maxTokens,
       messages: [{ role: 'user', content: prompt }],
     }
   );
@@ -94,15 +145,96 @@ async function callClaude(prompt: string): Promise<string> {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export async function runAIPrompt(prompt: string): Promise<string> {
-  const provider = getActiveProvider();
-  if (!provider) throw new Error('No AI provider configured. Add a Gemini, Groq, or Anthropic key in Settings.');
-  if (provider === 'gemini') return callGemini(prompt);
-  if (provider === 'groq') return callGroq(prompt);
-  return callClaude(prompt);
+const CALLERS: Record<Exclude<AIProvider, null>, (p: string, m: number, t: number) => Promise<string>> = {
+  gemini: callGemini,
+  groq: callGroq,
+  claude: callClaude,
+};
+
+function configuredProviders(): Exclude<AIProvider, null>[] {
+  const out: Exclude<AIProvider, null>[] = [];
+  if (localStorage.getItem('TRADEEDGE_GEMINI_KEY')) out.push('gemini');
+  if (localStorage.getItem('TRADEEDGE_GROQ_KEY')) out.push('groq');
+  if (localStorage.getItem('TRADEEDGE_ANTHROPIC_KEY')) out.push('claude');
+  return out;
+}
+
+/** Run a prompt through every configured provider until one succeeds. */
+export async function runAIPromptWithMeta(
+  prompt: string,
+  opts: AIPromptOptions = {}
+): Promise<{ text: string; provider: Exclude<AIProvider, null> }> {
+  const providers = configuredProviders();
+  if (!providers.length) {
+    throw new Error('No AI provider configured. Add a Gemini, Groq, or Anthropic key in Settings.');
+  }
+  const maxTokens = opts.maxTokens ?? 700;
+  const temperature = opts.temperature ?? 0.7;
+  const errors: string[] = [];
+
+  for (const provider of providers) {
+    try {
+      const text = await CALLERS[provider](prompt, maxTokens, temperature);
+      return { text, provider };
+    } catch (e) {
+      errors.push(`${PROVIDER_LABELS[provider]}: ${e instanceof Error ? e.message : 'failed'}`);
+    }
+  }
+  throw new Error(`All AI providers failed — ${errors.join(' | ')}`);
+}
+
+export async function runAIPrompt(prompt: string, opts?: AIPromptOptions): Promise<string> {
+  return (await runAIPromptWithMeta(prompt, opts)).text;
 }
 
 // ─── Prompt builders ─────────────────────────────────────────────────────────
+
+export interface MorningBriefDigest {
+  dateLabel: string;
+  marketOpen: boolean;
+  futures: Array<{ label: string; changePercent: number }>;
+  indices: Array<{ label: string; changePercent: number }>;
+  yields: Array<{ label: string; value: number }>;
+  commodities: Array<{ label: string; price: number; changePercent: number }>;
+  crypto: Array<{ label: string; price: number; changePercent: number }>;
+  fearGreed: { value: number; valueText: string } | null;
+  topSectors: Array<{ name: string; changePercent: number }>;
+  gainers: Array<{ symbol: string; changePercent: number }>;
+  losers: Array<{ symbol: string; changePercent: number }>;
+  earnings: { count: number; notable: string[] };
+  headlines: string[];
+}
+
+export function buildMorningBriefPrompt(d: MorningBriefDigest): string {
+  const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+  const lines: string[] = [];
+
+  if (d.futures.length) lines.push(`Futures: ${d.futures.map((f) => `${f.label} ${pct(f.changePercent)}`).join(', ')}`);
+  if (d.indices.length) lines.push(`Index ETFs: ${d.indices.map((i) => `${i.label} ${pct(i.changePercent)}`).join(', ')}`);
+  if (d.yields.length) lines.push(`Treasury yields: ${d.yields.map((y) => `${y.label} ${y.value.toFixed(2)}%`).join(', ')}`);
+  if (d.commodities.length) lines.push(`Commodities: ${d.commodities.map((c) => `${c.label} $${c.price.toFixed(2)} (${pct(c.changePercent)})`).join(', ')}`);
+  if (d.crypto.length) lines.push(`Crypto: ${d.crypto.map((c) => `${c.label} $${c.price.toLocaleString('en-US', { maximumFractionDigits: 0 })} (${pct(c.changePercent)})`).join(', ')}`);
+  if (d.fearGreed) lines.push(`Fear & Greed Index: ${d.fearGreed.value} (${d.fearGreed.valueText})`);
+  if (d.topSectors.length) lines.push(`Sector leaders/laggards: ${d.topSectors.map((s) => `${s.name} ${pct(s.changePercent)}`).join(', ')}`);
+  if (d.gainers.length) lines.push(`Top gainers: ${d.gainers.map((g) => `${g.symbol} ${pct(g.changePercent)}`).join(', ')}`);
+  if (d.losers.length) lines.push(`Top losers: ${d.losers.map((l) => `${l.symbol} ${pct(l.changePercent)}`).join(', ')}`);
+  if (d.earnings.count > 0) lines.push(`Earnings today: ${d.earnings.count} companies reporting${d.earnings.notable.length ? `; notable: ${d.earnings.notable.join(', ')}` : ''}`);
+  if (d.headlines.length) lines.push(`Headlines:\n${d.headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}`);
+
+  return `You are a professional sell-side market strategist writing a client-facing morning brief for ${d.dateLabel}. US markets are currently ${d.marketOpen ? 'open' : 'closed'}.
+
+Write a 3-4 paragraph narrative in plain text organized under exactly these three headings, each on its own line:
+Overnight & Futures
+Macro & Rates
+What to Watch Today
+
+Rules: no JSON, no markdown symbols (#, *, -), no bullet lists — flowing prose only. Be specific: cite the actual numbers provided. Be direct and analytical. No generic disclaimers. Never invent data — reference only the data below.
+
+MARKET DATA
+${lines.join('\n')}
+
+Write the brief:`;
+}
 
 export function buildMarketPrompt(snapshot: {
   fearGreed: { value: number; valueText: string };

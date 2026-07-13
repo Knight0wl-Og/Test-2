@@ -1,6 +1,10 @@
 import clsx from 'clsx';
 import { useFearGreed } from '../../hooks/useMarketData';
 
+export function getFearGreedColor(value: number): string {
+  return getColor(value);
+}
+
 function getColor(value: number): string {
   if (value <= 25) return '#ef4444';
   if (value <= 45) return '#f59e0b';
@@ -22,6 +26,11 @@ function getLabel(text: string): string {
 
 interface GaugeProps {
   value: number;
+}
+
+/** Semicircle fear & greed gauge — reused by the Morning Brief page */
+export function FearGreedGauge({ value }: GaugeProps) {
+  return <Gauge value={value} />;
 }
 
 function Gauge({ value }: GaugeProps) {

@@ -8,6 +8,7 @@ import { SymbolBar } from './components/layout/SymbolBar';
 
 // Pages
 import { Dashboard } from './pages/Dashboard';
+import { MorningBrief } from './pages/MorningBrief';
 import { ChartPage } from './pages/ChartPage';
 import { WatchlistPage } from './pages/WatchlistPage';
 import { NewsPage } from './pages/NewsPage';
@@ -76,6 +77,7 @@ export default function App() {
               </>
             } />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/brief" element={<MorningBrief />} />
             <Route path="/chart" element={<ChartPage />} />
             <Route path="/watchlist" element={<WatchlistPage />} />
             <Route path="/news" element={<NewsPage />} />

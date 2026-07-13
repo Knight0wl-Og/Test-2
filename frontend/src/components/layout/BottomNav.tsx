@@ -1,10 +1,11 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { BarChart2, List, Calendar, Newspaper, Search, MoreHorizontal } from 'lucide-react';
+import { BarChart2, List, Calendar, Sunrise, Newspaper, Search, MoreHorizontal } from 'lucide-react';
 import clsx from 'clsx';
 import { tap } from '../../services/haptics';
 
 const TABS = [
   { id: 'chart',     label: 'Chart',     icon: BarChart2,     path: '/'          },
+  { id: 'brief',     label: 'Brief',     icon: Sunrise,       path: '/brief'     },
   { id: 'watchlist', label: 'Watchlist', icon: List,          path: '/watchlist' },
   { id: 'earnings',  label: 'Earnings',  icon: Calendar,      path: '/earnings'  },
   { id: 'news',      label: 'News',      icon: Newspaper,     path: '/news'      },

@@ -35,6 +35,15 @@ export default {
         mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
+      boxShadow: {
+        card: 'inset 0 1px 0 0 rgba(255,255,255,0.04), 0 8px 24px -12px rgba(0,0,0,0.65)',
+        glow: '0 0 28px -8px rgba(99,102,241,0.4)',
+      },
+      backgroundImage: {
+        'card-gradient': 'linear-gradient(150deg, #181a26 0%, #14151f 60%, #10101a 100%)',
+        'panel-gradient': 'linear-gradient(180deg, #12131d 0%, #0d0d14 100%)',
+        'accent-gradient': 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+      },
     },
   },
   plugins: [],

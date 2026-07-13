@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Search, BookOpen, Bot,
   TrendingUp, Briefcase, Bell, LineChart,
   Calendar, BarChart2, PieChart, Activity,
-  BarChart, DollarSign, Zap, GitCompare, Newspaper, Layers,
+  BarChart, DollarSign, Zap, GitCompare, Newspaper, Layers, Sunrise,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -25,6 +25,7 @@ export interface Feature {
 export const FEATURES: Feature[] = [
   // ── Core ──────────────────────────────────────────────────────────────
   { id: 'dashboard', path: '/', label: 'Dashboard', description: 'Market overview & heatmap', icon: LayoutDashboard, color: 'text-accent bg-accent/10', group: 'core' },
+  { id: 'brief', path: '/brief', label: 'Morning Brief', description: 'Daily pre-market report', icon: Sunrise, color: 'text-gold bg-gold/10', group: 'core' },
   { id: 'top10', path: '/top10', label: 'Top 10', description: 'Top gainers & losers', icon: TrendingUp, color: 'text-green bg-green/10', group: 'core' },
   { id: 'scanner', path: '/scanner', label: 'Screener', description: 'Market-wide stock scanner', icon: Search, color: 'text-accent bg-accent/10', group: 'core' },
   { id: 'options', path: '/options', label: 'Options', description: 'Calls & puts chain', icon: LineChart, color: 'text-gold bg-gold/10', group: 'core' },

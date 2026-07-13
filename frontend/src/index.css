@@ -7,6 +7,17 @@
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
+@layer components {
+  /* Standard elevated card surface — subtle gradient + inner highlight */
+  .card-surface {
+    @apply bg-card-gradient border border-border-panel rounded-2xl shadow-card;
+  }
+  /* Uppercase micro section heading used across pages */
+  .section-label {
+    @apply text-[10px] font-semibold uppercase tracking-wider text-text-muted;
+  }
+}
+
 :root {
   --color-green: #22c55e;
   --color-red: #ef4444;
