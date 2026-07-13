@@ -179,6 +179,9 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [schwabClientSecret, setSchwabClientSecret] = useState(localStorage.getItem('TRADEEDGE_SCHWAB_CLIENT_SECRET') || '');
   const [schwabConnected, setSchwabConnected] = useState(!!localStorage.getItem('SCHWAB_ACCESS_TOKEN'));
   const [schwabConnecting, setSchwabConnecting] = useState(false);
+  const [schwabAwaitingCode, setSchwabAwaitingCode] = useState(false);
+  const [schwabPasteUrl, setSchwabPasteUrl] = useState('');
+  const [schwabExchanging, setSchwabExchanging] = useState(false);
   const [watermark, setWatermark] = useState(localStorage.getItem('tradeedge_watermark') || 'TradeEdge');
 
   async function save() {
@@ -207,10 +210,32 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     try {
       const { startSchwabOAuth } = await import('../../services/schwabService');
       await startSchwabOAuth();
+      setSchwabAwaitingCode(true);
     } catch (e: unknown) {
       alert((e as Error).message);
     } finally {
       setSchwabConnecting(false);
+    }
+  }
+
+  async function completeSchwabConnection() {
+    setSchwabExchanging(true);
+    try {
+      const { extractSchwabCode, exchangeSchwabCode } = await import('../../services/schwabService');
+      const code = extractSchwabCode(schwabPasteUrl);
+      if (!code) {
+        alert('Could not find a code in what you pasted. Copy the full URL from the browser address bar (it starts with https://127.0.0.1/?code=...)');
+        return;
+      }
+      await exchangeSchwabCode(code);
+      setSchwabConnected(true);
+      setSchwabAwaitingCode(false);
+      setSchwabPasteUrl('');
+      alert('Schwab connected! Real-time quotes are now active.');
+    } catch (e: unknown) {
+      alert((e as Error).message);
+    } finally {
+      setSchwabExchanging(false);
     }
   }
 
@@ -219,6 +244,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     localStorage.removeItem('SCHWAB_REFRESH_TOKEN');
     localStorage.removeItem('SCHWAB_TOKEN_EXPIRY');
     setSchwabConnected(false);
+    setSchwabAwaitingCode(false);
   }
 
   return (
@@ -284,18 +310,45 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             <span className="text-xs font-medium text-gray-300">Schwab Client Secret</span>
           </div>
           <input type="password" value={schwabClientSecret} onChange={(e) => setSchwabClientSecret(e.target.value)} placeholder="Your Schwab app Client Secret" className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono" />
-          <p className="text-[10px] text-text-muted mt-1">Get from developer.schwab.com → My Apps (pending approval)</p>
+          <p className="text-[10px] text-text-muted mt-1">
+            developer.schwab.com → My Apps. The app's Callback URL must be exactly{' '}
+            <span className="font-mono text-gray-300">https://127.0.0.1</span> and status must be "Ready For Use".
+          </p>
         </div>
         {schwabClientId && schwabClientSecret && (
-          <div className="mb-4">
+          <div className="mb-4 space-y-2">
             {schwabConnected ? (
               <button onClick={disconnectSchwab} className="w-full text-xs text-red-400 hover:text-red-300 border border-red-900/40 rounded py-1.5 transition-colors">
                 Disconnect Schwab Account
               </button>
             ) : (
-              <button onClick={connectSchwab} disabled={schwabConnecting} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded py-2 text-sm font-medium transition-colors">
-                {schwabConnecting ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Connecting…</> : '🔗 Connect Schwab Account'}
-              </button>
+              <>
+                <button onClick={connectSchwab} disabled={schwabConnecting} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded py-2 text-sm font-medium transition-colors">
+                  {schwabConnecting ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Opening Schwab…</> : schwabAwaitingCode ? '🔗 Reopen Schwab Login' : '🔗 Connect Schwab Account'}
+                </button>
+                {schwabAwaitingCode && (
+                  <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3 space-y-2">
+                    <p className="text-[11px] text-blue-300 leading-snug">
+                      After logging in, Schwab sends you to a page that won't load
+                      (<span className="font-mono">https://127.0.0.1/?code=…</span>).
+                      That's expected — copy the <b>full URL</b> from the browser address bar and paste it below <b>within 30 seconds</b>:
+                    </p>
+                    <input
+                      value={schwabPasteUrl}
+                      onChange={(e) => setSchwabPasteUrl(e.target.value)}
+                      placeholder="https://127.0.0.1/?code=…"
+                      className="w-full bg-bg-hover border border-border-dim rounded px-3 py-2 text-xs text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono"
+                    />
+                    <button
+                      onClick={completeSchwabConnection}
+                      disabled={schwabExchanging || !schwabPasteUrl.trim()}
+                      className="w-full flex items-center justify-center gap-2 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white rounded py-2 text-sm font-medium transition-colors"
+                    >
+                      {schwabExchanging ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Connecting…</> : '✓ Complete Connection'}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

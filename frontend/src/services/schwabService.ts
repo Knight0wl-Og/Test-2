@@ -4,9 +4,14 @@
  *
  * Setup (after Schwab approves your developer access):
  * 1. Go to developer.schwab.com → My Apps → Create App
- * 2. Set Redirect URI to: tradeedge://oauth/callback
- * 3. Copy Client ID and Client Secret → paste in TradeEdge Settings
- * 4. Tap "Connect Schwab Account" → log in → done
+ * 2. Set the Callback URL to exactly: https://127.0.0.1
+ *    (Schwab only accepts HTTPS callback URLs — custom schemes are rejected
+ *    with "We are unable to complete your request")
+ * 3. Wait until the app status is "Ready For Use" (not "Approved - Pending")
+ * 4. Copy App Key (Client ID) and Secret → paste in TradeEdge Settings
+ * 5. Tap "Connect Schwab Account" → log in → the browser lands on a
+ *    https://127.0.0.1/?code=... page that won't load — copy that URL from
+ *    the address bar and paste it back into Settings to finish connecting.
  */
 import { Capacitor } from '@capacitor/core';
 
@@ -15,7 +20,7 @@ import { Capacitor } from '@capacitor/core';
 const SCHWAB_AUTH_URL = 'https://api.schwabapi.com/v1/oauth/authorize';
 const SCHWAB_TOKEN_URL = 'https://api.schwabapi.com/v1/oauth/token';
 const SCHWAB_API_BASE = 'https://api.schwabapi.com/marketdata/v1';
-const REDIRECT_URI = 'tradeedge://oauth/callback';
+const REDIRECT_URI = 'https://127.0.0.1';
 
 const LS_ACCESS_TOKEN = 'SCHWAB_ACCESS_TOKEN';
 const LS_REFRESH_TOKEN = 'SCHWAB_REFRESH_TOKEN';
@@ -70,7 +75,7 @@ function isTokenExpired(): boolean {
 
 // ─── OAuth ────────────────────────────────────────────────────────────────────
 
-/** Open Schwab login page. Redirect will come back via tradeedge://oauth/callback */
+/** Open Schwab login page. User copies the https://127.0.0.1/?code=... URL back. */
 export async function startSchwabOAuth() {
   const clientId = getSchwabClientId();
   if (!clientId) throw new Error('Enter your Schwab Client ID in Settings first.');
@@ -86,10 +91,52 @@ export async function startSchwabOAuth() {
 
   if (Capacitor.isNativePlatform()) {
     const { Browser } = await import('@capacitor/browser');
-    await Browser.open({ url: authUrl, windowName: '_self' });
+    await Browser.open({ url: authUrl });
   } else {
     window.open(authUrl, '_blank', 'width=600,height=700');
   }
+}
+
+/**
+ * Extract the authorization code from whatever the user pasted —
+ * the full https://127.0.0.1/?code=...&session=... URL or just the code.
+ * Schwab codes end in '@' which arrives URL-encoded as %40.
+ */
+export function extractSchwabCode(input: string): string | null {
+  const raw = input.trim();
+  if (!raw) return null;
+  const match = raw.match(/[?&]code=([^&\s]+)/);
+  const code = match ? match[1] : raw;
+  try {
+    return decodeURIComponent(code);
+  } catch {
+    return code;
+  }
+}
+
+/** POST to Schwab's token endpoint — CapacitorHttp on native (browser fetch is CORS-blocked) */
+async function schwabTokenPost(body: URLSearchParams, credentials: string): Promise<{ ok: boolean; status: number; data: any }> {
+  if (Capacitor.isNativePlatform()) {
+    const { CapacitorHttp } = await import('@capacitor/core');
+    const res = await CapacitorHttp.post({
+      url: SCHWAB_TOKEN_URL,
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      data: body.toString(),
+    });
+    return { ok: res.status === 200, status: res.status, data: res.data };
+  }
+  const res = await fetch(SCHWAB_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: body.toString(),
+  });
+  return { ok: res.ok, status: res.status, data: res.ok ? await res.json() : null };
 }
 
 /** Exchange authorization code for access + refresh tokens */
@@ -105,17 +152,15 @@ export async function exchangeSchwabCode(code: string): Promise<void> {
     redirect_uri: REDIRECT_URI,
   });
 
-  const res = await fetch(SCHWAB_TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
-  });
-
-  if (!res.ok) throw new Error(`Token exchange failed (${res.status})`);
-  const data = await res.json();
+  const res = await schwabTokenPost(body, credentials);
+  if (!res.ok) {
+    throw new Error(
+      res.status === 400
+        ? 'Token exchange failed — the code may have expired (they last ~30 seconds). Tap Connect and try again.'
+        : `Token exchange failed (${res.status}) — check your Client ID and Secret.`
+    );
+  }
+  const data = res.data;
 
   saveSchwabTokens({
     accessToken: data.access_token,
@@ -138,21 +183,13 @@ export async function refreshSchwabToken(): Promise<string> {
     refresh_token: tokens.refreshToken,
   });
 
-  const res = await fetch(SCHWAB_TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
-  });
-
+  const res = await schwabTokenPost(body, credentials);
   if (!res.ok) {
     clearSchwabTokens();
     throw new Error('Schwab session expired. Please reconnect in Settings.');
   }
 
-  const data = await res.json();
+  const data = res.data;
   saveSchwabTokens({
     accessToken: data.access_token,
     refreshToken: data.refresh_token ?? tokens.refreshToken,
