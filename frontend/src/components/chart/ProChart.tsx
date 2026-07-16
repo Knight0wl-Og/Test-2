@@ -4,13 +4,17 @@ import {
   LineStyle,
   type IChartApi,
   type ISeriesApi,
+  type IPriceLine,
   type MouseEventParams,
 } from 'lightweight-charts';
+import { Bell, Camera } from 'lucide-react';
 import clsx from 'clsx';
 import type { OHLCVBar } from '../../types';
 import { useHistory } from '../../hooks/useHistory';
 import { useQuote } from '../../hooks/useQuotes';
 import { useEarnings } from '../../hooks/useEarnings';
+import { loadAlerts } from '../../services/alertsService';
+import { AddAlertModal } from '../common/AddAlertModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -22,8 +26,13 @@ interface IndicatorState {
   sma50:  boolean;
   sma100: boolean;
   sma200: boolean;
+  ema20:  boolean;
+  ema50:  boolean;
+  bb:     boolean;
+  vwap:   boolean;
   volume: boolean;
   rsi:    boolean;
+  macd:   boolean;
 }
 
 interface OHLCTooltip {
@@ -61,12 +70,56 @@ const COLORS = {
   sma50:  '#22c55e',   // green  — medium (50-day)
   sma100: '#f97316',   // orange — medium-slow (100-day)
   sma200: '#ef4444',   // red    — slow / institutional (200-day)
+  ema20:  '#eab308',   // yellow
+  ema50:  '#ec4899',   // pink
+  bb:     'rgba(96,165,250,0.6)',  // light blue bands
+  bbFill: 'rgba(96,165,250,0.28)',
+  vwap:   '#f59e0b',   // gold
   rsi:    '#a78bfa',   // purple
+  macd:   '#3b82f6',
+  macdSignal: '#f97316',
+  macdHistUp: 'rgba(34,197,94,0.5)',
+  macdHistDown: 'rgba(239,68,68,0.5)',
+  alertLine: '#f59e0b',
 };
 
-// Main-chart bottom margin varies with RSI sub-panel
-const MARGINS_RSI_ON  = { top: 0.08, bottom: 0.42 } as const;
-const MARGINS_RSI_OFF = { top: 0.08, bottom: 0.22 } as const;
+const PREFS_KEY = 'tradeedge_chart_prefs_v1';
+
+const DEFAULT_INDICATORS: IndicatorState = {
+  sma20: true, sma50: true, sma100: false, sma200: true,
+  ema20: false, ema50: false, bb: false, vwap: false,
+  volume: true, rsi: true, macd: false,
+};
+
+interface ChartPrefs {
+  timeframe: Timeframe;
+  chartType: ChartType;
+  indicators: IndicatorState;
+}
+
+function loadPrefs(): Partial<ChartPrefs> {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Pane layout — panes stack from bottom: volume, MACD, RSI, price on top.
+ * Fractions are of total chart height.
+ */
+function paneMargins(ind: IndicatorState) {
+  const vol  = ind.volume ? 0.10 : 0;
+  const macd = ind.macd   ? 0.16 : 0;
+  const rsi  = ind.rsi    ? 0.16 : 0;
+  return {
+    main: { top: 0.05, bottom: Math.min(vol + macd + rsi + 0.04, 0.60) },
+    rsi:  { top: Math.max(1 - (rsi + macd + vol), 0.05), bottom: macd + vol },
+    macd: { top: Math.max(1 - (macd + vol), 0.05), bottom: vol },
+    vol:  { top: 0.90, bottom: 0 },
+  };
+}
 
 // ─── Utility: 4H aggregation ─────────────────────────────────────────────────
 
@@ -89,11 +142,13 @@ function aggregate4h(bars: OHLCVBar[]): OHLCVBar[] {
     }));
 }
 
-// ─── Utility: Simple Moving Average (rolling sum, O(n)) ──────────────────────
+// ─── Indicator math ──────────────────────────────────────────────────────────
 
-function calculateSMA(bars: OHLCVBar[], period: number): { time: number; value: number }[] {
+type Point = { time: number; value: number };
+
+function calculateSMA(bars: OHLCVBar[], period: number): Point[] {
   if (bars.length < period) return [];
-  const result: { time: number; value: number }[] = [];
+  const result: Point[] = [];
   let sum = 0;
   for (let i = 0; i < period; i++) sum += bars[i].close;
   result.push({ time: bars[period - 1].time, value: sum / period });
@@ -104,36 +159,108 @@ function calculateSMA(bars: OHLCVBar[], period: number): { time: number; value: 
   return result;
 }
 
-// ─── Utility: RSI-14 (Wilder's smoothed method) ───────────────────────────────
-
-function calculateRSI(bars: OHLCVBar[], period = 14): { time: number; value: number }[] {
-  if (bars.length < period + 1) return [];
-  const result: { time: number; value: number }[] = [];
-
-  // Seed with simple averages over the first `period` changes
-  let avgGain = 0;
-  let avgLoss = 0;
-  for (let i = 1; i <= period; i++) {
-    const diff = bars[i].close - bars[i - 1].close;
-    if (diff > 0) avgGain += diff;
-    else          avgLoss -= diff;
-  }
-  avgGain /= period;
-  avgLoss /= period;
-  const firstRS = avgLoss === 0 ? 100 : avgGain / avgLoss;
-  result.push({ time: bars[period].time, value: 100 - 100 / (1 + firstRS) });
-
-  // Wilder smoothing for subsequent bars
-  for (let i = period + 1; i < bars.length; i++) {
-    const diff = bars[i].close - bars[i - 1].close;
-    const gain = diff > 0 ? diff : 0;
-    const loss = diff < 0 ? -diff : 0;
-    avgGain = (avgGain * (period - 1) + gain) / period;
-    avgLoss = (avgLoss * (period - 1) + loss) / period;
-    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    result.push({ time: bars[i].time, value: 100 - 100 / (1 + rs) });
+function calculateEMA(bars: OHLCVBar[], period: number): Point[] {
+  if (bars.length < period) return [];
+  const result: Point[] = [];
+  let seed = 0;
+  for (let i = 0; i < period; i++) seed += bars[i].close;
+  seed /= period;
+  result.push({ time: bars[period - 1].time, value: seed });
+  const k = 2 / (period + 1);
+  let prev = seed;
+  for (let i = period; i < bars.length; i++) {
+    prev = bars[i].close * k + prev * (1 - k);
+    result.push({ time: bars[i].time, value: prev });
   }
   return result;
+}
+
+/** Bollinger Bands: SMA(20) ± 2 standard deviations */
+function calculateBollinger(bars: OHLCVBar[], period = 20, mult = 2): { upper: Point[]; mid: Point[]; lower: Point[] } {
+  const upper: Point[] = [];
+  const mid: Point[] = [];
+  const lower: Point[] = [];
+  if (bars.length < period) return { upper, mid, lower };
+  for (let i = period - 1; i < bars.length; i++) {
+    let sum = 0;
+    for (let j = i - period + 1; j <= i; j++) sum += bars[j].close;
+    const mean = sum / period;
+    let variance = 0;
+    for (let j = i - period + 1; j <= i; j++) variance += (bars[j].close - mean) ** 2;
+    const sd = Math.sqrt(variance / period);
+    const t = bars[i].time;
+    mid.push({ time: t, value: mean });
+    upper.push({ time: t, value: mean + mult * sd });
+    lower.push({ time: t, value: mean - mult * sd });
+  }
+  return { upper, mid, lower };
+}
+
+/** VWAP with session (UTC-day) reset — intraday timeframes only */
+function calculateVWAP(bars: OHLCVBar[]): Point[] {
+  const result: Point[] = [];
+  let day = '';
+  let cumPV = 0;
+  let cumV = 0;
+  for (const b of bars) {
+    const d = new Date(b.time * 1000).toISOString().slice(0, 10);
+    if (d !== day) { day = d; cumPV = 0; cumV = 0; }
+    const typical = (b.high + b.low + b.close) / 3;
+    cumPV += typical * b.volume;
+    cumV += b.volume;
+    if (cumV > 0) result.push({ time: b.time, value: cumPV / cumV });
+  }
+  return result;
+}
+
+/** MACD 12/26/9 */
+function calculateMACD(bars: OHLCVBar[]): { macd: Point[]; signal: Point[]; hist: Point[] } {
+  const macdLine: Point[] = [];
+  const signal: Point[] = [];
+  const hist: Point[] = [];
+  if (bars.length < 26) return { macd: macdLine, signal, hist };
+
+  const closes = bars.map((b) => b.close);
+  const emaOf = (period: number): (number | null)[] => {
+    const out: (number | null)[] = new Array(closes.length).fill(null);
+    let seed = 0;
+    for (let i = 0; i < period; i++) seed += closes[i];
+    seed /= period;
+    out[period - 1] = seed;
+    const k = 2 / (period + 1);
+    for (let i = period; i < closes.length; i++) out[i] = closes[i] * k + (out[i - 1] as number) * (1 - k);
+    return out;
+  };
+
+  const fast = emaOf(12);
+  const slow = emaOf(26);
+  const macdVals: (number | null)[] = closes.map((_, i) =>
+    fast[i] != null && slow[i] != null ? (fast[i] as number) - (slow[i] as number) : null
+  );
+
+  // Signal = EMA(9) of MACD over its non-null region
+  const first = macdVals.findIndex((v) => v != null);
+  const sigVals: (number | null)[] = new Array(closes.length).fill(null);
+  if (first >= 0 && closes.length - first >= 9) {
+    let seed = 0;
+    for (let i = first; i < first + 9; i++) seed += macdVals[i] as number;
+    seed /= 9;
+    sigVals[first + 8] = seed;
+    const k = 2 / 10;
+    for (let i = first + 9; i < closes.length; i++) {
+      sigVals[i] = (macdVals[i] as number) * k + (sigVals[i - 1] as number) * (1 - k);
+    }
+  }
+
+  for (let i = 0; i < bars.length; i++) {
+    const t = bars[i].time;
+    if (macdVals[i] != null) macdLine.push({ time: t, value: macdVals[i] as number });
+    if (sigVals[i] != null) signal.push({ time: t, value: sigVals[i] as number });
+    if (macdVals[i] != null && sigVals[i] != null) {
+      hist.push({ time: t, value: (macdVals[i] as number) - (sigVals[i] as number) });
+    }
+  }
+  return { macd: macdLine, signal, hist };
 }
 
 // ─── Tooltip ─────────────────────────────────────────────────────────────────
@@ -171,18 +298,21 @@ function Tooltip({ tip, visible }: { tip: OHLCTooltip | null; visible: boolean }
 // ─── Indicator Toggle Button ──────────────────────────────────────────────────
 
 function IndicatorBtn({
-  label, active, color, onClick,
-}: { label: string; active: boolean; color?: string; onClick: () => void }) {
+  label, active, color, disabled, title, onClick,
+}: { label: string; active: boolean; color?: string; disabled?: boolean; title?: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
+      title={title}
       className={clsx(
         'px-2 py-0.5 rounded text-[10px] font-mono transition-colors shrink-0 border',
-        active && !color && 'bg-accent/20 text-accent border-accent/40',
-        active &&  color && 'border-transparent',
-        !active           && 'text-text-muted hover:text-gray-300 border-transparent',
+        disabled           && 'opacity-30 cursor-not-allowed',
+        active && !color   && 'bg-accent/20 text-accent border-accent/40',
+        active &&  color   && 'border-transparent',
+        !active            && 'text-text-muted hover:text-gray-300 border-transparent',
       )}
-      style={active && color
+      style={active && color && !disabled
         ? { color, borderColor: `${color}55`, backgroundColor: `${color}18` }
         : undefined}
     >
@@ -200,13 +330,17 @@ interface ProChartProps {
 }
 
 export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChartProps) {
-  const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
-  const [chartType, setChartType] = useState<ChartType>('candle');
+  const prefs = loadPrefs();
+  const [timeframe, setTimeframe] = useState<Timeframe>(prefs.timeframe ?? initialTimeframe);
+  const [chartType, setChartType] = useState<ChartType>(prefs.chartType ?? 'candle');
   const [indicators, setIndicators] = useState<IndicatorState>({
-    sma20: true, sma50: true, sma100: true, sma200: true, volume: true, rsi: true,
+    ...DEFAULT_INDICATORS,
+    ...(prefs.indicators ?? {}),
   });
   const [tooltip, setTooltip] = useState<OHLCTooltip | null>(null);
   const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertsVersion, setAlertsVersion] = useState(0);
 
   const containerRef  = useRef<HTMLDivElement>(null);
   const chartRef      = useRef<IChartApi | null>(null);
@@ -216,7 +350,17 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
   const sma50Ref      = useRef<ISeriesApi<'Line'> | null>(null);
   const sma100Ref     = useRef<ISeriesApi<'Line'> | null>(null);
   const sma200Ref     = useRef<ISeriesApi<'Line'> | null>(null);
+  const ema20Ref      = useRef<ISeriesApi<'Line'> | null>(null);
+  const ema50Ref      = useRef<ISeriesApi<'Line'> | null>(null);
+  const bbUpperRef    = useRef<ISeriesApi<'Line'> | null>(null);
+  const bbMidRef      = useRef<ISeriesApi<'Line'> | null>(null);
+  const bbLowerRef    = useRef<ISeriesApi<'Line'> | null>(null);
+  const vwapRef       = useRef<ISeriesApi<'Line'> | null>(null);
   const rsiRef        = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdLineRef   = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdSignalRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdHistRef   = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const alertLinesRef = useRef<IPriceLine[]>([]);
 
   const cfg = TIMEFRAME_CONFIG[timeframe];
   const { data: rawBars = [], isLoading } = useHistory(symbol, cfg.period, cfg.interval);
@@ -227,6 +371,13 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
   const toggleIndicator = useCallback((key: keyof IndicatorState) => {
     setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
+
+  // Persist chart preferences (TradingView-style: your setup follows you)
+  useEffect(() => {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ timeframe, chartType, indicators } satisfies ChartPrefs));
+    } catch { /* storage full — ignore */ }
+  }, [timeframe, chartType, indicators]);
 
   // ── Create chart once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -248,39 +399,43 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
         vertLine: { color: COLORS.crosshair, labelBackgroundColor: '#1c1c28' },
         horzLine: { color: COLORS.crosshair, labelBackgroundColor: '#1c1c28' },
       },
-      // Default margins assume RSI is on (matches initial indicator state)
-      rightPriceScale: { borderColor: '#1a1a28', scaleMargins: MARGINS_RSI_ON },
+      rightPriceScale: { borderColor: '#1a1a28' },
       timeScale: { borderColor: '#1a1a28', timeVisible: true, secondsVisible: false },
       handleScroll: true,
       handleScale: true,
     });
     chartRef.current = chart;
 
-    // ── Volume histogram (bottom ~15%) ────────────────────────────────────
+    // ── Volume histogram (bottom pane) ────────────────────────────────────
     const vol = chart.addHistogramSeries({
       priceFormat: { type: 'volume' },
       priceScaleId: 'vol',
     });
-    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
     volumeRef.current = vol;
 
-    // ── SMA overlays (main price scale) ──────────────────────────────────
-    const makeSMA = (color: string): ISeriesApi<'Line'> =>
+    // ── Overlay line factory (main price scale) ──────────────────────────
+    const makeOverlay = (color: string, width: 1 | 2 = 1, style: LineStyle = LineStyle.Solid): ISeriesApi<'Line'> =>
       chart.addLineSeries({
         color,
-        lineWidth: 1,
-        lineStyle: LineStyle.Solid,
+        lineWidth: width,
+        lineStyle: style,
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
       });
 
-    sma20Ref.current  = makeSMA(COLORS.sma20);
-    sma50Ref.current  = makeSMA(COLORS.sma50);
-    sma100Ref.current = makeSMA(COLORS.sma100);
-    sma200Ref.current = makeSMA(COLORS.sma200);
+    sma20Ref.current  = makeOverlay(COLORS.sma20);
+    sma50Ref.current  = makeOverlay(COLORS.sma50);
+    sma100Ref.current = makeOverlay(COLORS.sma100);
+    sma200Ref.current = makeOverlay(COLORS.sma200);
+    ema20Ref.current  = makeOverlay(COLORS.ema20);
+    ema50Ref.current  = makeOverlay(COLORS.ema50);
+    bbUpperRef.current = makeOverlay(COLORS.bb);
+    bbMidRef.current   = makeOverlay(COLORS.bbFill, 1, LineStyle.Dotted);
+    bbLowerRef.current = makeOverlay(COLORS.bb);
+    vwapRef.current    = makeOverlay(COLORS.vwap, 2, LineStyle.Dashed);
 
-    // ── RSI sub-panel (middle ~18%, between main and volume) ───────────
+    // ── RSI sub-pane ──────────────────────────────────────────────────────
     const rsiSeries = chart.addLineSeries({
       color: COLORS.rsi,
       lineWidth: 1,
@@ -290,14 +445,26 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
       crosshairMarkerVisible: false,
       priceScaleId: 'rsi',
     });
-    chart.priceScale('rsi').applyOptions({
-      scaleMargins: { top: 0.63, bottom: 0.18 },
-    });
-    // Overbought / oversold / midline reference lines
     rsiSeries.createPriceLine({ price: 70, color: 'rgba(239,68,68,0.55)',   lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,  title: '70' });
     rsiSeries.createPriceLine({ price: 30, color: 'rgba(34,197,94,0.55)',   lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,  title: '30' });
     rsiSeries.createPriceLine({ price: 50, color: 'rgba(148,163,184,0.2)', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: ''   });
     rsiRef.current = rsiSeries;
+
+    // ── MACD sub-pane (histogram + macd + signal) ─────────────────────────
+    macdHistRef.current = chart.addHistogramSeries({
+      priceScaleId: 'macd',
+      priceFormat: { type: 'price', precision: 3, minMove: 0.001 },
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
+    macdLineRef.current = chart.addLineSeries({
+      color: COLORS.macd, lineWidth: 1, priceScaleId: 'macd',
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    macdSignalRef.current = chart.addLineSeries({
+      color: COLORS.macdSignal, lineWidth: 1, priceScaleId: 'macd',
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
 
     return () => {
       chart.remove();
@@ -308,7 +475,17 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
       sma50Ref.current    = null;
       sma100Ref.current   = null;
       sma200Ref.current   = null;
+      ema20Ref.current    = null;
+      ema50Ref.current    = null;
+      bbUpperRef.current  = null;
+      bbMidRef.current    = null;
+      bbLowerRef.current  = null;
+      vwapRef.current     = null;
       rsiRef.current      = null;
+      macdLineRef.current = null;
+      macdSignalRef.current = null;
+      macdHistRef.current = null;
+      alertLinesRef.current = [];
     };
   }, []);
 
@@ -320,6 +497,7 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
     if (mainSeriesRef.current) {
       chart.removeSeries(mainSeriesRef.current);
       mainSeriesRef.current = null;
+      alertLinesRef.current = [];
     }
 
     if (chartType === 'candle') {
@@ -348,6 +526,7 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
 
     type LCTime = import('lightweight-charts').Time;
     const toTime = (t: number) => t as unknown as LCTime;
+    const pts = (arr: Point[]) => arr.map((p) => ({ time: toTime(p.time), value: p.value }));
 
     // Main series
     const tvBars = bars.map((b) => ({ time: toTime(b.time), open: b.open, high: b.high, low: b.low, close: b.close }));
@@ -372,35 +551,91 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
       );
     }
 
-    // SMA helper
-    const feedSMA = (s: ISeriesApi<'Line'> | null, on: boolean, period: number) => {
+    // Moving-average overlays
+    const feed = (s: ISeriesApi<'Line'> | null, on: boolean, data: () => Point[]) => {
       if (!s) return;
-      s.setData(
-        on
-          ? calculateSMA(bars, period).map((p) => ({ time: toTime(p.time), value: p.value }))
-          : []
-      );
+      s.setData(on ? pts(data()) : []);
     };
-    feedSMA(sma20Ref.current,  indicators.sma20,  20);
-    feedSMA(sma50Ref.current,  indicators.sma50,  50);
-    feedSMA(sma100Ref.current, indicators.sma100, 100);
-    feedSMA(sma200Ref.current, indicators.sma200, 200);
+    feed(sma20Ref.current,  indicators.sma20,  () => calculateSMA(bars, 20));
+    feed(sma50Ref.current,  indicators.sma50,  () => calculateSMA(bars, 50));
+    feed(sma100Ref.current, indicators.sma100, () => calculateSMA(bars, 100));
+    feed(sma200Ref.current, indicators.sma200, () => calculateSMA(bars, 200));
+    feed(ema20Ref.current,  indicators.ema20,  () => calculateEMA(bars, 20));
+    feed(ema50Ref.current,  indicators.ema50,  () => calculateEMA(bars, 50));
 
-    // RSI + dynamic main-chart bottom margin
-    if (rsiRef.current) {
-      rsiRef.current.setData(
-        indicators.rsi
-          ? calculateRSI(bars).map((p) => ({ time: toTime(p.time), value: p.value }))
-          : []
-      );
-      chart.priceScale('right').applyOptions({
-        scaleMargins: indicators.rsi ? MARGINS_RSI_ON : MARGINS_RSI_OFF,
-      });
+    // Bollinger Bands
+    if (indicators.bb) {
+      const bb = calculateBollinger(bars);
+      bbUpperRef.current?.setData(pts(bb.upper));
+      bbMidRef.current?.setData(pts(bb.mid));
+      bbLowerRef.current?.setData(pts(bb.lower));
+    } else {
+      bbUpperRef.current?.setData([]);
+      bbMidRef.current?.setData([]);
+      bbLowerRef.current?.setData([]);
     }
+
+    // VWAP (intraday only)
+    feed(vwapRef.current, indicators.vwap && cfg.isIntraday, () => calculateVWAP(bars));
+
+    // RSI pane
+    if (rsiRef.current) {
+      rsiRef.current.setData(indicators.rsi ? pts(rsiPoints(bars)) : []);
+    }
+
+    // MACD pane
+    if (indicators.macd) {
+      const m = calculateMACD(bars);
+      macdLineRef.current?.setData(pts(m.macd));
+      macdSignalRef.current?.setData(pts(m.signal));
+      macdHistRef.current?.setData(
+        m.hist.map((p) => ({
+          time: toTime(p.time),
+          value: p.value,
+          color: p.value >= 0 ? COLORS.macdHistUp : COLORS.macdHistDown,
+        }))
+      );
+    } else {
+      macdLineRef.current?.setData([]);
+      macdSignalRef.current?.setData([]);
+      macdHistRef.current?.setData([]);
+    }
+
+    // Dynamic pane layout
+    const m = paneMargins(indicators);
+    chart.priceScale('right').applyOptions({ scaleMargins: m.main });
+    chart.priceScale('rsi').applyOptions({ scaleMargins: m.rsi });
+    chart.priceScale('macd').applyOptions({ scaleMargins: m.macd });
+    chart.priceScale('vol').applyOptions({ scaleMargins: m.vol });
 
     chart.timeScale().fitContent();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bars, indicators, chartType]);
+  }, [bars, indicators, chartType, cfg.isIntraday]);
+
+  // ── Alert price lines (drawn on the chart, TradingView-style) ─────────────
+  useEffect(() => {
+    const main = mainSeriesRef.current;
+    if (!main) return;
+
+    // Clear previous lines
+    for (const line of alertLinesRef.current) {
+      try { main.removePriceLine(line); } catch { /* series rebuilt */ }
+    }
+    alertLinesRef.current = [];
+
+    const active = loadAlerts().filter((a) => a.symbol === symbol && !a.triggered);
+    for (const a of active) {
+      const line = main.createPriceLine({
+        price: a.targetPrice,
+        color: COLORS.alertLine,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `🔔 ${a.direction === 'above' ? '≥' : '≤'} ${a.targetPrice}`,
+      });
+      alertLinesRef.current.push(line);
+    }
+  }, [symbol, alertsVersion, chartType, bars.length]);
 
   // ── Crosshair tooltip ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -473,6 +708,21 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
     (main as ISeriesApi<'Candlestick'>).setMarkers(markers);
   }, [earningsDates, bars]);
 
+  // ── Screenshot (chart canvas → PNG download) ──────────────────────────────
+  const takeScreenshot = useCallback(async () => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    try {
+      const canvas = chart.takeScreenshot();
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = `${symbol}-${timeframe}-${new Date().toISOString().slice(0, 10)}.png`;
+      a.click();
+    } catch (e) {
+      console.warn('[ProChart] screenshot failed:', e);
+    }
+  }, [symbol, timeframe]);
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const TIMEFRAMES: Timeframe[] = ['5m', '15m', '30m', '1h', '4h', '1d', '1w'];
@@ -530,13 +780,47 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
 
         <div className="w-px h-4 bg-panel shrink-0" />
 
-        {/* SMA toggles — each button uses the SMA's own colour when active */}
+        {/* Overlays */}
         <IndicatorBtn label="SMA20"  active={indicators.sma20}  color={COLORS.sma20}  onClick={() => toggleIndicator('sma20')} />
         <IndicatorBtn label="SMA50"  active={indicators.sma50}  color={COLORS.sma50}  onClick={() => toggleIndicator('sma50')} />
         <IndicatorBtn label="SMA100" active={indicators.sma100} color={COLORS.sma100} onClick={() => toggleIndicator('sma100')} />
         <IndicatorBtn label="SMA200" active={indicators.sma200} color={COLORS.sma200} onClick={() => toggleIndicator('sma200')} />
-        <IndicatorBtn label="VOL"    active={indicators.volume}                        onClick={() => toggleIndicator('volume')} />
-        <IndicatorBtn label="RSI"    active={indicators.rsi}    color={COLORS.rsi}    onClick={() => toggleIndicator('rsi')} />
+        <IndicatorBtn label="EMA20"  active={indicators.ema20}  color={COLORS.ema20}  onClick={() => toggleIndicator('ema20')} />
+        <IndicatorBtn label="EMA50"  active={indicators.ema50}  color={COLORS.ema50}  onClick={() => toggleIndicator('ema50')} />
+        <IndicatorBtn label="BB"     active={indicators.bb}     color="#60a5fa"       onClick={() => toggleIndicator('bb')} />
+        <IndicatorBtn
+          label="VWAP"
+          active={indicators.vwap && cfg.isIntraday}
+          color={COLORS.vwap}
+          disabled={!cfg.isIntraday}
+          title={cfg.isIntraday ? 'Volume-weighted average price (session)' : 'VWAP is intraday-only'}
+          onClick={() => toggleIndicator('vwap')}
+        />
+
+        <div className="w-px h-4 bg-panel shrink-0" />
+
+        {/* Panes */}
+        <IndicatorBtn label="VOL"  active={indicators.volume}                          onClick={() => toggleIndicator('volume')} />
+        <IndicatorBtn label="RSI"  active={indicators.rsi}    color={COLORS.rsi}      onClick={() => toggleIndicator('rsi')} />
+        <IndicatorBtn label="MACD" active={indicators.macd}   color={COLORS.macd}     onClick={() => toggleIndicator('macd')} />
+
+        <div className="w-px h-4 bg-panel shrink-0" />
+
+        {/* Actions */}
+        <button
+          onClick={() => setShowAlertModal(true)}
+          title="Create price alert (drawn on chart)"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text-muted hover:text-gold transition-colors shrink-0"
+        >
+          <Bell className="w-3 h-3" />Alert
+        </button>
+        <button
+          onClick={takeScreenshot}
+          title="Save chart as PNG"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text-muted hover:text-white transition-colors shrink-0"
+        >
+          <Camera className="w-3 h-3" />
+        </button>
       </div>
 
       {/* ── Chart canvas ── */}
@@ -549,6 +833,44 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
         <Tooltip tip={tooltip} visible={tooltipVisible} />
         <div ref={containerRef} className="absolute inset-0" />
       </div>
+
+      {showAlertModal && (
+        <AddAlertModal
+          defaultSymbol={symbol}
+          onClose={() => setShowAlertModal(false)}
+          onAdded={() => setAlertsVersion((v) => v + 1)}
+        />
+      )}
     </div>
   );
+}
+
+// ─── RSI helper (kept close to original implementation) ─────────────────────
+
+function rsiPoints(bars: OHLCVBar[], period = 14): Point[] {
+  if (bars.length < period + 1) return [];
+  const result: Point[] = [];
+
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = bars[i].close - bars[i - 1].close;
+    if (diff > 0) avgGain += diff;
+    else          avgLoss -= diff;
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  const firstRS = avgLoss === 0 ? 100 : avgGain / avgLoss;
+  result.push({ time: bars[period].time, value: 100 - 100 / (1 + firstRS) });
+
+  for (let i = period + 1; i < bars.length; i++) {
+    const diff = bars[i].close - bars[i - 1].close;
+    const gain = diff > 0 ? diff : 0;
+    const loss = diff < 0 ? -diff : 0;
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    result.push({ time: bars[i].time, value: 100 - 100 / (1 + rs) });
+  }
+  return result;
 }
