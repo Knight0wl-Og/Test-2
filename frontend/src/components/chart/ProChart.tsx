@@ -7,7 +7,7 @@ import {
   type IPriceLine,
   type MouseEventParams,
 } from 'lightweight-charts';
-import { Bell, Camera } from 'lucide-react';
+import { Bell, Camera, PenLine, Minus, Undo2, Eraser } from 'lucide-react';
 import clsx from 'clsx';
 import type { OHLCVBar } from '../../types';
 import { useHistory } from '../../hooks/useHistory';
@@ -15,6 +15,10 @@ import { useQuote } from '../../hooks/useQuotes';
 import { useEarnings } from '../../hooks/useEarnings';
 import { loadAlerts } from '../../services/alertsService';
 import { AddAlertModal } from '../common/AddAlertModal';
+import {
+  loadDrawings, saveDrawings, renderDrawings,
+  type Drawing, type DrawingTool, type DrawPoint,
+} from './chartDrawings';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -84,6 +88,8 @@ const COLORS = {
 };
 
 const PREFS_KEY = 'tradeedge_chart_prefs_v1';
+
+const ALL_TIMEFRAMES: Timeframe[] = ['5m', '15m', '30m', '1h', '4h', '1d', '1w'];
 
 const DEFAULT_INDICATORS: IndicatorState = {
   sma20: true, sma50: true, sma100: false, sma200: true,
@@ -341,6 +347,8 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertsVersion, setAlertsVersion] = useState(0);
+  const [activeTool, setActiveTool] = useState<DrawingTool>('none');
+  const [drawings, setDrawings] = useState<Drawing[]>(() => loadDrawings(symbol));
 
   const containerRef  = useRef<HTMLDivElement>(null);
   const chartRef      = useRef<IChartApi | null>(null);
@@ -361,6 +369,12 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
   const macdSignalRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdHistRef   = useRef<ISeriesApi<'Histogram'> | null>(null);
   const alertLinesRef = useRef<IPriceLine[]>([]);
+  const drawCanvasRef = useRef<HTMLCanvasElement>(null);
+  const toolRef       = useRef<DrawingTool>('none');
+  const drawingsRef   = useRef<Drawing[]>([]);
+  const pendingRef    = useRef<DrawPoint | null>(null);
+  const cursorPxRef   = useRef<{ x: number; y: number } | null>(null);
+  const barsRef       = useRef<OHLCVBar[]>([]);
 
   const cfg = TIMEFRAME_CONFIG[timeframe];
   const { data: rawBars = [], isLoading } = useHistory(symbol, cfg.period, cfg.interval);
@@ -378,6 +392,68 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
       localStorage.setItem(PREFS_KEY, JSON.stringify({ timeframe, chartType, indicators } satisfies ChartPrefs));
     } catch { /* storage full — ignore */ }
   }, [timeframe, chartType, indicators]);
+
+  // ── Drawing overlay: re-project (time, price) anchors to pixels ───────────
+  const redrawDrawings = useCallback(() => {
+    const canvas = drawCanvasRef.current;
+    const container = containerRef.current;
+    const chart = chartRef.current;
+    const series = mainSeriesRef.current;
+    if (!canvas || !container || !chart || !series) return;
+
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Map an arbitrary unix time to an x-coordinate via fractional bar index.
+    // (timeToCoordinate only resolves exact bar times, which would make
+    // drawings vanish after a timeframe switch.)
+    const barsNow = barsRef.current;
+    const toX = (t: number): number | null => {
+      if (!barsNow.length) return null;
+      let idx: number;
+      const last = barsNow.length - 1;
+      if (t <= barsNow[0].time) {
+        idx = 0;
+      } else if (t >= barsNow[last].time) {
+        // Extrapolate past the last bar using the final bar interval
+        const step = last > 0 ? barsNow[last].time - barsNow[last - 1].time : 86400;
+        idx = last + (step > 0 ? (t - barsNow[last].time) / step : 0);
+      } else {
+        let lo = 0, hi = last;
+        while (hi - lo > 1) {
+          const mid = (lo + hi) >> 1;
+          if (barsNow[mid].time <= t) lo = mid;
+          else hi = mid;
+        }
+        const span = barsNow[hi].time - barsNow[lo].time;
+        idx = lo + (span > 0 ? (t - barsNow[lo].time) / span : 0);
+      }
+      const c = chart.timeScale().logicalToCoordinate(idx as import('lightweight-charts').Logical);
+      return c == null ? null : (c as number);
+    };
+    const toY = (p: number) => {
+      const c = series.priceToCoordinate(p);
+      return c == null ? null : (c as number);
+    };
+
+    const cursor = cursorPxRef.current;
+    renderDrawings(
+      ctx, w, h, drawingsRef.current, toX, toY,
+      pendingRef.current && cursor
+        ? { point: pendingRef.current, cursorX: cursor.x, cursorY: cursor.y }
+        : null
+    );
+  }, []);
 
   // ── Create chart once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -466,7 +542,52 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
       priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
     });
 
+    // ── Drawing tools: click to place anchors on the chart itself ─────────
+    const clickHandler = (param: MouseEventParams) => {
+      const tool = toolRef.current;
+      const series = mainSeriesRef.current;
+      if (tool === 'none' || !param.point || !series) return;
+      const price = series.coordinateToPrice(param.point.y);
+      const time = param.time as unknown as number | undefined;
+      if (price == null || time == null) return;
+
+      const pt: DrawPoint = { time, price: price as number };
+      const commit = (d: Drawing) => {
+        setDrawings((prev) => [...prev, d]);
+        pendingRef.current = null;
+        setActiveTool('none');
+      };
+
+      if (tool === 'hline') {
+        commit({ id: crypto.randomUUID(), type: 'hline', points: [pt] });
+      } else if (!pendingRef.current) {
+        pendingRef.current = pt;
+        redrawDrawings();
+      } else {
+        commit({ id: crypto.randomUUID(), type: tool, points: [pendingRef.current, pt] });
+      }
+    };
+    chart.subscribeClick(clickHandler);
+
+    // Live dashed preview from the first anchor to the cursor
+    const previewHandler = (param: MouseEventParams) => {
+      if (!pendingRef.current) return;
+      if (param.point) cursorPxRef.current = { x: param.point.x, y: param.point.y };
+      redrawDrawings();
+    };
+    chart.subscribeCrosshairMove(previewHandler);
+
+    // Keep drawings glued to bars while panning/zooming
+    chart.timeScale().subscribeVisibleLogicalRangeChange(redrawDrawings);
+
+    const ro = new ResizeObserver(redrawDrawings);
+    ro.observe(containerRef.current);
+
     return () => {
+      chart.unsubscribeClick(clickHandler);
+      chart.unsubscribeCrosshairMove(previewHandler);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(redrawDrawings);
+      ro.disconnect();
       chart.remove();
       chartRef.current    = null;
       mainSeriesRef.current = null;
@@ -487,6 +608,50 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
       macdHistRef.current = null;
       alertLinesRef.current = [];
     };
+  }, []);
+
+  // ── Drawing state sync: refs, persistence, per-symbol reload ──────────────
+  useEffect(() => { toolRef.current = activeTool; }, [activeTool]);
+
+  useEffect(() => {
+    drawingsRef.current = drawings;
+    saveDrawings(symbol, drawings);
+    redrawDrawings();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawings]);
+
+  useEffect(() => {
+    pendingRef.current = null;
+    setActiveTool('none');
+    setDrawings(loadDrawings(symbol));
+  }, [symbol]);
+
+  // ── Keyboard shortcuts (desktop): 1-7 timeframes · c/b/l chart types ─────
+  // t/h/f drawing tools · Esc cancels the active tool
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+
+      if (e.key === 'Escape') {
+        pendingRef.current = null;
+        setActiveTool('none');
+        redrawDrawings();
+        return;
+      }
+      const tfIdx = ['1', '2', '3', '4', '5', '6', '7'].indexOf(e.key);
+      if (tfIdx >= 0) { setTimeframe(ALL_TIMEFRAMES[tfIdx]); return; }
+      if (e.key === 'c') setChartType('candle');
+      else if (e.key === 'b') setChartType('bar');
+      else if (e.key === 'l') setChartType('line');
+      else if (e.key === 't') setActiveTool((p) => (p === 'trend' ? 'none' : 'trend'));
+      else if (e.key === 'h') setActiveTool((p) => (p === 'hline' ? 'none' : 'hline'));
+      else if (e.key === 'f') setActiveTool((p) => (p === 'fib' ? 'none' : 'fib'));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Rebuild main series when chartType changes ─────────────────────────────
@@ -608,7 +773,9 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
     chart.priceScale('macd').applyOptions({ scaleMargins: m.macd });
     chart.priceScale('vol').applyOptions({ scaleMargins: m.vol });
 
+    barsRef.current = bars;
     chart.timeScale().fitContent();
+    redrawDrawings();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bars, indicators, chartType, cfg.isIntraday]);
 
@@ -806,6 +973,52 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
 
         <div className="w-px h-4 bg-panel shrink-0" />
 
+        {/* Drawing tools */}
+        <button
+          onClick={() => setActiveTool((p) => (p === 'trend' ? 'none' : 'trend'))}
+          title="Trendline — click two points (T)"
+          className={clsx('flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors shrink-0',
+            activeTool === 'trend' ? 'bg-accent text-white' : 'text-text-muted hover:text-gray-300')}
+        >
+          <PenLine className="w-3 h-3" />Trend
+        </button>
+        <button
+          onClick={() => setActiveTool((p) => (p === 'hline' ? 'none' : 'hline'))}
+          title="Horizontal level — click a price (H)"
+          className={clsx('flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors shrink-0',
+            activeTool === 'hline' ? 'bg-accent text-white' : 'text-text-muted hover:text-gray-300')}
+        >
+          <Minus className="w-3 h-3" />Level
+        </button>
+        <button
+          onClick={() => setActiveTool((p) => (p === 'fib' ? 'none' : 'fib'))}
+          title="Fibonacci retracement — click high then low (F)"
+          className={clsx('px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors shrink-0',
+            activeTool === 'fib' ? 'bg-accent text-white' : 'text-text-muted hover:text-gray-300')}
+        >
+          Fib
+        </button>
+        {drawings.length > 0 && (
+          <>
+            <button
+              onClick={() => setDrawings((prev) => prev.slice(0, -1))}
+              title="Undo last drawing"
+              className="px-1 py-0.5 rounded text-text-muted hover:text-white transition-colors shrink-0"
+            >
+              <Undo2 className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => setDrawings([])}
+              title="Clear all drawings"
+              className="px-1 py-0.5 rounded text-text-muted hover:text-red-400 transition-colors shrink-0"
+            >
+              <Eraser className="w-3 h-3" />
+            </button>
+          </>
+        )}
+
+        <div className="w-px h-4 bg-panel shrink-0" />
+
         {/* Actions */}
         <button
           onClick={() => setShowAlertModal(true)}
@@ -831,7 +1044,13 @@ export function ProChart({ symbol, initialTimeframe = '1d', className }: ProChar
           </div>
         )}
         <Tooltip tip={tooltip} visible={tooltipVisible} />
+        {activeTool !== 'none' && (
+          <div className="absolute top-1 right-2 z-10 bg-accent/90 text-white rounded px-2 py-0.5 text-[10px] pointer-events-none select-none">
+            {activeTool === 'hline' ? 'Click a price level' : activeTool === 'fib' ? 'Click the high, then the low' : 'Click two points'} · Esc to cancel
+          </div>
+        )}
         <div ref={containerRef} className="absolute inset-0" />
+        <canvas ref={drawCanvasRef} className="absolute inset-0 z-[5] pointer-events-none" />
       </div>
 
       {showAlertModal && (
